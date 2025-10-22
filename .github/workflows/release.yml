@@ -1,0 +1,333 @@
+name: Build and Release Supreme
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+    - name: Install NSIS (Windows via Scoop)
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        iwr -useb get.scoop.sh | iex
+        scoop bucket add extras
+        scoop install nsis
+        # Ensure makensis is on PATH for subsequent steps
+        "$env:USERPROFILE\scoop\shims" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        # Quick check
+        & "$env:USERPROFILE\scoop\shims\makensis.exe" -VERSION
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up environment
+      shell: bash
+      run: |
+        echo "SUPREME_VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+        echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
+        
+    - name: Create version file
+      shell: bash
+      run: |
+        mkdir -p supreme
+        cat > supreme/version << EOF
+        SUPREME_VERSION=$SUPREME_VERSION
+        BUILD_DATE=$BUILD_DATE
+        GIT_COMMIT=$GITHUB_SHA
+        EOF
+        
+    - name: Make scripts executable
+      run: |
+        chmod +x supreme-installer.sh
+        chmod +x supreme/cli/supreme
+        chmod +x supreme/modules/*.sh
+        chmod +x supreme/lib/*.sh
+        
+    - name: Build Linux package (.deb)
+      if: matrix.os == 'ubuntu-latest'
+      shell: bash
+      run: |
+        # Install build dependencies
+        sudo apt-get update
+        sudo apt-get install -y build-essential devscripts debhelper
+        
+        # Create Debian package structure
+        mkdir -p supreme-deb/DEBIAN
+        mkdir -p supreme-deb/usr/local/bin
+        mkdir -p supreme-deb/usr/local/share/supreme
+        mkdir -p supreme-deb/etc/supreme
+        
+        # Copy files
+        cp supreme-installer.sh supreme-deb/usr/local/bin/supreme-installer
+        cp -r supreme/* supreme-deb/usr/local/share/supreme/
+        
+        # Create control file
+        cat > supreme-deb/DEBIAN/control << EOF
+        Package: supreme-dev
+        Version: $SUPREME_VERSION
+        Section: devel
+        Priority: optional
+        Architecture: amd64
+        Depends: curl, wget
+        Maintainer: Supreme Development Team
+        Description: Supreme Development Environment
+         A comprehensive development environment manager for local web development.
+         Features include XAMPP integration, framework templates, SSL management,
+         database operations, and multi-platform support.
+        EOF
+        
+        # Create postinst script
+        cat > supreme-deb/DEBIAN/postinst << EOF
+        #!/bin/bash
+        set -e
+        chmod +x /usr/local/bin/supreme-installer
+        chmod +x /usr/local/share/supreme/cli/supreme
+        chmod +x /usr/local/share/supreme/modules/*.sh
+        chmod +x /usr/local/share/supreme/lib/*.sh
+        echo "Supreme Development Environment installed successfully!"
+        echo "Run 'supreme-installer' to configure your environment."
+        EOF
+        chmod +x supreme-deb/DEBIAN/postinst
+        
+        # Create prerm script
+        cat > supreme-deb/DEBIAN/prerm << EOF
+        #!/bin/bash
+        set -e
+        echo "Removing Supreme Development Environment..."
+        EOF
+        chmod +x supreme-deb/DEBIAN/prerm
+        
+        # Build package
+        dpkg-deb --build supreme-deb supreme-dev_${SUPREME_VERSION}_amd64.deb
+        
+    - name: Build Windows installer (.exe)
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        # Resolve makensis path (prefer PATH, fallback to Scoop shim)
+        $makensis = (Get-Command makensis -ErrorAction SilentlyContinue)?.Source
+        if (-not $makensis) { $makensis = "$env:USERPROFILE\scoop\shims\makensis.exe" }
+        Write-Host "Using makensis at: $makensis"
+        # Create Windows installer script using a PowerShell here-string
+        $nsi = @'
+        !define SUPREME_VERSION "${SUPREME_VERSION}"
+        !define BUILD_DATE "${BUILD_DATE}"
+        
+        Name "Supreme Development Environment"
+        OutFile "supreme-dev-${SUPREME_VERSION}-windows.exe"
+        InstallDir "C:\Program Files\Supreme"
+        RequestExecutionLevel admin
+        
+        Section "MainSection" SEC01
+          SetOutPath "$INSTDIR"
+          File /r supreme\*
+          File supreme-installer.sh
+          
+          SetOutPath "$INSTDIR\bin"
+          File supreme\cli\supreme
+          
+          # Create shortcuts
+          CreateDirectory "$SMPROGRAMS\Supreme"
+          CreateShortCut "$SMPROGRAMS\Supreme\Supreme Installer.lnk" "$INSTDIR\supreme-installer.sh"
+          CreateShortCut "$SMPROGRAMS\Supreme\Supreme CLI.lnk" "$INSTDIR\bin\supreme"
+          
+          # Add to PATH using registry
+          WriteRegExpandStr HKLM "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" "Path" "$INSTDIR\bin;$Path"
+        SectionEnd
+        
+        Section -Post
+          WriteUninstaller "$INSTDIR\uninstall.exe"
+          WriteRegStr HKLM "$PRODUCT_UNINST_KEY" "DisplayName" "$(^Name)"
+          WriteRegStr HKLM "$PRODUCT_UNINST_KEY" "UninstallString" "$INSTDIR\uninstall.exe"
+          WriteRegStr HKLM "$PRODUCT_UNINST_KEY" "DisplayVersion" "$SUPREME_VERSION"
+        SectionEnd
+        
+        Section Uninstall
+          Delete "$INSTDIR\uninstall.exe"
+          RMDir /r "$INSTDIR"
+          Delete "$SMPROGRAMS\Supreme\*.*"
+          RMDir "$SMPROGRAMS\Supreme"
+        SectionEnd
+        '@
+        # Substitute version/date placeholders
+        $nsi = $nsi -replace '\$\{SUPREME_VERSION\}',$env:SUPREME_VERSION -replace '\$\{BUILD_DATE\}',$env:BUILD_DATE
+        Set-Content -Path 'supreme-installer.nsi' -Value $nsi -NoNewline
+        
+        # Compile installer
+        & $makensis supreme-installer.nsi
+        
+    - name: Build macOS package (.dmg)
+      if: matrix.os == 'macos-latest'
+      shell: bash
+      run: |
+        # Create DMG structure
+        mkdir -p Supreme.app/Contents/MacOS
+        mkdir -p Supreme.app/Contents/Resources
+        mkdir -p Supreme.app/Contents/Resources/supreme
+        
+        # Copy files
+        cp -r supreme/* Supreme.app/Contents/Resources/supreme/
+        cp supreme-installer.sh Supreme.app/Contents/Resources/
+        
+        # Create launcher script
+        cat > Supreme.app/Contents/MacOS/Supreme << EOF
+        #!/bin/bash
+        cd "\$(dirname "\$0")/../Resources"
+        exec ./supreme-installer.sh
+        EOF
+        chmod +x Supreme.app/Contents/MacOS/Supreme
+        
+        # Create Info.plist
+        cat > Supreme.app/Contents/Info.plist << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>CFBundleExecutable</key>
+          <string>Supreme</string>
+          <key>CFBundleIdentifier</key>
+          <string>com.supreme.dev</string>
+          <key>CFBundleName</key>
+          <string>Supreme Development Environment</string>
+          <key>CFBundleVersion</key>
+          <string>$SUPREME_VERSION</string>
+          <key>CFBundleShortVersionString</key>
+          <string>$SUPREME_VERSION</string>
+        </dict>
+        </plist>
+        EOF
+        
+        # Create DMG
+        hdiutil create -volname "Supreme Development Environment" -srcfolder Supreme.app -ov -format UDZO supreme-dev-${SUPREME_VERSION}-macos.dmg
+        
+    - name: Upload Linux artifact
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-deb
+        path: supreme-dev_${{ env.SUPREME_VERSION }}_amd64.deb
+
+    - name: Upload Windows artifact
+      if: matrix.os == 'windows-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-exe
+        path: supreme-dev-${{ env.SUPREME_VERSION }}-windows.exe
+
+    - name: Upload macOS artifact
+      if: matrix.os == 'macos-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-dmg
+        path: supreme-dev-${{ env.SUPREME_VERSION }}-macos.dmg
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up environment
+      shell: bash
+      run: |
+        echo "SUPREME_VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+        echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
+
+    - name: Download Linux artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: linux-deb
+        path: dist
+
+    - name: Download Windows artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: windows-exe
+        path: dist
+
+    - name: Download macOS artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: macos-dmg
+        path: dist
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: ${{ env.SUPREME_VERSION }}
+        body: |
+          # Supreme Development Environment ${{ env.SUPREME_VERSION }}
+          
+          ## What's New
+          - XAMPP-first dependency management
+          - Interactive installation prompts
+          - Cross-platform support (Linux, macOS, Windows)
+          - Framework-specific project templates
+          - SSL certificate management
+          - Database operations
+          
+          ## Downloads
+          - **Linux**: `supreme-dev_${{ env.SUPREME_VERSION }}_amd64.deb`
+          - **Windows**: `supreme-dev-${{ env.SUPREME_VERSION }}-windows.exe`
+          - **macOS**: `supreme-dev-${{ env.SUPREME_VERSION }}-macos.dmg`
+          
+          ## Installation
+          
+          ### Linux (Debian/Ubuntu)
+          ```bash
+          sudo dpkg -i supreme-dev_${{ env.SUPREME_VERSION }}_amd64.deb
+          sudo apt-get install -f  # Fix dependencies if needed
+          supreme-installer
+          ```
+          
+          ### Windows
+          1. Download `supreme-dev-${{ env.SUPREME_VERSION }}-windows.exe`
+          2. Run as Administrator
+          3. Follow the installation wizard
+          4. Run `supreme-installer` from Start Menu
+          
+          ### macOS
+          1. Download `supreme-dev-${{ env.SUPREME_VERSION }}-macos.dmg`
+          2. Mount the DMG and drag to Applications
+          3. Run Supreme from Applications
+          4. Follow the setup wizard
+          
+          ## Quick Start
+          ```bash
+          # After installation
+          supreme new myproject
+          supreme create laravel myapi
+          supreme dev myapi
+          ```
+          
+          ## Documentation
+          - [Installation Guide](https://github.com/${{ github.repository }}/blob/main/supreme/INSTALL.md)
+          - [README](https://github.com/${{ github.repository }}/blob/main/supreme/README.md)
+          
+          ## Support
+          - [Issues](https://github.com/${{ github.repository }}/issues)
+          - [Discussions](https://github.com/${{ github.repository }}/discussions)
+        files: |
+          dist/supreme-dev_${{ env.SUPREME_VERSION }}_amd64.deb
+          dist/supreme-dev-${{ env.SUPREME_VERSION }}-windows.exe
+          dist/supreme-dev-${{ env.SUPREME_VERSION }}-macos.dmg
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

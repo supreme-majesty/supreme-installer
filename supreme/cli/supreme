@@ -1,0 +1,598 @@
+#!/usr/bin/env bash
+# Supreme Development Environment - CLI Module
+# Main CLI command handlers and interface
+
+# Source utilities and modules
+# shellcheck source=lib/utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/utils.sh"
+# shellcheck source=modules/platform.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../modules/platform.sh"
+# shellcheck source=modules/ssl.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../modules/ssl.sh"
+# shellcheck source=modules/database.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../modules/database.sh"
+# shellcheck source=modules/projects.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../modules/projects.sh"
+# shellcheck source=modules/dependencies.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../modules/dependencies.sh"
+
+# ----------------------
+# CLI Configuration
+# ----------------------
+site_available_dir="/etc/supreme/sites-available"
+site_enabled_dir="/etc/supreme/sites-enabled"
+
+ensure_dirs() {
+  sudo mkdir -p "$site_available_dir" "$site_enabled_dir"
+  sudo chown -R "$(logname)":"$(logname)" "$site_available_dir" "$site_enabled_dir" || true
+}
+
+# ----------------------
+# Usage Information
+# ----------------------
+usage() {
+  cat <<EOS
+
+Usage: supreme <command> [args]
+
+Commands:
+  new <name>            Create a new project folder, vhost, and /etc/hosts entry
+  create <type> <name>  Create a new project with framework template (laravel, wordpress, react, vue, etc.)
+  start <name>          Start a project (enable vhost and restart Apache)
+  stop <name>           Stop a project (disable vhost and restart Apache)
+  dev <name>            Start development server with hot reloading
+  test <name>           Run automated tests for a project
+  status <name>         Show project status and information
+  deps                  Check and install missing dependencies
+  suggest <action>      Show what dependencies are needed for specific actions
+  enable https          Enable HTTPS globally (creates wildcard cert if needed) and restart Apache
+  disable https         Disable HTTPS (revert to HTTP) and restart Apache
+  list                  List projects under \$HTDOCS_ROOT
+  info                  Show configuration and status
+  restart               Restart Apache
+  doctor                Run health checks
+  uninstall             Remove supreme (configs and CLI). Does NOT delete your projects unless confirmed.
+
+Database Commands (if enabled):
+  db create <name>      Create a new database
+  db drop <name>        Drop a database
+  db list               List all databases
+  db import <name> <file> Import SQL file into database
+  db export <name>      Export database to SQL file
+  db status             Show database service status
+
+SSL Commands:
+  ssl renew             Renew wildcard certificate
+  ssl status            Show SSL certificate status and expiry
+  ssl install           Install mkcert CA certificate
+
+Docker Commands:
+  docker init <name>    Initialize a Docker Compose project
+  docker up <name>      Start Docker Compose services
+  docker down <name>    Stop Docker Compose services
+  docker logs <name>    Show Docker Compose logs
+
+Performance Commands:
+  monitor <name>        Start performance monitoring for a project
+  profile <name>        Generate performance profile report
+  benchmark <name>      Run performance benchmarks
+EOS
+}
+
+# ----------------------
+# Apache Management
+# ----------------------
+restart_apache() {
+  eval "$APACHE_RESTART_CMD"
+}
+
+# ----------------------
+# Main Command Handler
+# ----------------------
+handle_command() {
+  local command="${1:-}"
+  
+  # Load configuration
+  if ! load_config; then
+    exit 1
+  fi
+  
+  ensure_dirs
+  
+  case "$command" in
+    new)
+      local name="${2:-}"
+      if [[ -z "$name" ]]; then
+        echo "Usage: supreme new <projectname>"
+        exit 1
+      fi
+      
+      create_basic_project "$name"
+      create_vhost "$name"
+      add_hosts_entry "$name"
+      restart_apache
+      ok "Site created: http$([ "$DEFAULT_PROTOCOL" == "https" ] && echo 's')://$name.$TLD"
+      ;;
+      
+    create)
+      local framework="${2:-}"
+      local name="${3:-}"
+      if [[ -z "$framework" ]] || [[ -z "$name" ]]; then
+        echo "Usage: supreme create <framework> <project_name>"
+        echo "Available frameworks: laravel, wordpress, react, vue, angular, nextjs, express, flask, django"
+        exit 1
+      fi
+      
+      # Check framework requirements
+      if ! check_framework_requirements "$framework"; then
+        local platform=$(detect_platform)
+        suggest_dependencies_for_action "create_$framework" "$platform"
+        exit 1
+      fi
+      
+      if create_framework_project "$framework" "$name"; then
+        create_vhost "$name"
+        add_hosts_entry "$name"
+        restart_apache
+        ok "$framework project created: http$([ "$DEFAULT_PROTOCOL" == "https" ] && echo 's')://$name.$TLD"
+      fi
+      ;;
+      
+    start)
+      local name="${2:-}"
+      if [[ -z "$name" ]]; then
+        echo "Usage: supreme start <project_name>"
+        exit 1
+      fi
+      
+      local project_dir="$HTDOCS_ROOT/$name"
+      local vfile="$site_available_dir/$name.conf"
+      
+      if [[ ! -d "$project_dir" ]]; then
+        err "Project folder not found: $project_dir"
+        exit 1
+      fi
+      
+      if [[ ! -f "$vfile" ]]; then
+        err "Vhost file not found: $vfile"
+        exit 1
+      fi
+      
+      # Enable vhost
+      if [[ ! -L "$site_enabled_dir/$name.conf" ]]; then
+        sudo ln -sf "$vfile" "$site_enabled_dir/$name.conf"
+        ok "Enabled vhost for $name.$TLD"
+      else
+        echo "Vhost already enabled for $name.$TLD"
+      fi
+      
+      restart_apache
+      ok "Project '$name' started: http$([ "$DEFAULT_PROTOCOL" == "https" ] && echo 's')://$name.$TLD"
+      ;;
+      
+    stop)
+      local name="${2:-}"
+      if [[ -z "$name" ]]; then
+        echo "Usage: supreme stop <project_name>"
+        exit 1
+      fi
+      
+      local project_dir="$HTDOCS_ROOT/$name"
+      local vfile="$site_enabled_dir/$name.conf"
+      
+      if [[ ! -d "$project_dir" ]]; then
+        err "Project folder not found: $project_dir"
+        exit 1
+      fi
+      
+      # Disable vhost
+      if [[ -L "$vfile" ]]; then
+        sudo rm -f "$vfile"
+        ok "Disabled vhost for $name.$TLD"
+      else
+        echo "Vhost already disabled for $name.$TLD"
+      fi
+      
+      restart_apache
+      ok "Project '$name' stopped"
+      ;;
+      
+    status)
+      local name="${2:-}"
+      if [[ -z "$name" ]]; then
+        echo "Usage: supreme status <project_name>"
+        exit 1
+      fi
+      
+      get_project_status "$name"
+      ;;
+      
+    dev)
+      local name="${2:-}"
+      if [[ -z "$name" ]]; then
+        echo "Usage: supreme dev <project_name>"
+        exit 1
+      fi
+      
+      local project_dir="$HTDOCS_ROOT/$name"
+      if [[ ! -d "$project_dir" ]]; then
+        err "Project folder not found: $project_dir"
+        exit 1
+      fi
+      
+      # Check dependencies based on project type
+      cd "$project_dir"
+      local platform=$(detect_platform)
+      
+      if [[ -f "package.json" ]]; then
+        if ! check_dependency "node"; then
+          err "Node.js is required for this project"
+          if confirm "Would you like to install Node.js automatically?"; then
+            if install_dependency_interactive "node" "$platform"; then
+              ok "Node.js installed successfully!"
+            else
+              exit 1
+            fi
+          else
+            show_installation_recommendations "$platform"
+            exit 1
+          fi
+        fi
+      elif [[ -f "composer.json" ]]; then
+        if ! check_dependency "php"; then
+          err "PHP is required for this project"
+          if confirm "Would you like to install PHP automatically?"; then
+            if install_dependency_interactive "php" "$platform"; then
+              ok "PHP installed successfully!"
+            else
+              exit 1
+            fi
+          else
+            show_installation_recommendations "$platform"
+            exit 1
+          fi
+        fi
+      elif [[ -f "requirements.txt" ]] || [[ -f "pyproject.toml" ]]; then
+        if ! check_dependency "python3"; then
+          err "Python3 is required for this project"
+          if confirm "Would you like to install Python3 automatically?"; then
+            if install_dependency_interactive "python3" "$platform"; then
+              ok "Python3 installed successfully!"
+            else
+              exit 1
+            fi
+          else
+            show_installation_recommendations "$platform"
+            exit 1
+          fi
+        fi
+      fi
+      
+      log "Starting development server with hot reloading for: $name"
+      
+      # Detect project type and start appropriate dev server
+      if [[ -f "package.json" ]]; then
+        # Node.js project
+        if grep -q "react-scripts" package.json; then
+          log "Starting React development server..."
+          npm start
+        elif grep -q "vue" package.json; then
+          log "Starting Vue development server..."
+          npm run serve
+        elif grep -q "next" package.json; then
+          log "Starting Next.js development server..."
+          npm run dev
+        elif grep -q "angular" package.json; then
+          log "Starting Angular development server..."
+          npm start
+        else
+          # Generic Node.js project
+          if [[ -f "index.js" ]] || [[ -f "app.js" ]]; then
+            log "Starting Node.js development server..."
+            if command -v nodemon &>/dev/null; then
+              nodemon
+            else
+              node .
+            fi
+          else
+            err "No suitable development server found for this Node.js project"
+            exit 1
+          fi
+        fi
+      elif [[ -f "composer.json" ]]; then
+        # PHP project (Laravel, etc.)
+        if grep -q "laravel/framework" composer.json; then
+          log "Starting Laravel development server..."
+          php artisan serve --host=0.0.0.0 --port=8000
+        else
+          log "Starting PHP development server..."
+          php -S 0.0.0.0:8000
+        fi
+      elif [[ -f "requirements.txt" ]] || [[ -f "pyproject.toml" ]]; then
+        # Python project
+        if [[ -f "manage.py" ]]; then
+          # Django project
+          log "Starting Django development server..."
+          python manage.py runserver 0.0.0.0:8000
+        elif [[ -f "app.py" ]]; then
+          # Flask project
+          log "Starting Flask development server..."
+          export FLASK_ENV=development
+          export FLASK_DEBUG=1
+          python app.py
+        else
+          err "No suitable Python development server found"
+          exit 1
+        fi
+      else
+        err "No supported development server found for this project type"
+        exit 1
+      fi
+      ;;
+      
+    test)
+      local name="${2:-}"
+      if [[ -z "$name" ]]; then
+        echo "Usage: supreme test <project_name>"
+        exit 1
+      fi
+      
+      local project_dir="$HTDOCS_ROOT/$name"
+      if [[ ! -d "$project_dir" ]]; then
+        err "Project folder not found: $project_dir"
+        exit 1
+      fi
+      
+      # Check dependencies based on project type
+      cd "$project_dir"
+      local platform=$(detect_platform)
+      
+      if [[ -f "package.json" ]]; then
+        if ! check_dependency "node"; then
+          err "Node.js is required for testing this project"
+          if confirm "Would you like to install Node.js automatically?"; then
+            if install_dependency_interactive "node" "$platform"; then
+              ok "Node.js installed successfully!"
+            else
+              exit 1
+            fi
+          else
+            show_installation_recommendations "$platform"
+            exit 1
+          fi
+        fi
+      elif [[ -f "composer.json" ]]; then
+        if ! check_dependency "php"; then
+          err "PHP is required for testing this project"
+          if confirm "Would you like to install PHP automatically?"; then
+            if install_dependency_interactive "php" "$platform"; then
+              ok "PHP installed successfully!"
+            else
+              exit 1
+            fi
+          else
+            show_installation_recommendations "$platform"
+            exit 1
+          fi
+        fi
+      elif [[ -f "requirements.txt" ]] || [[ -f "pyproject.toml" ]]; then
+        if ! check_dependency "python3"; then
+          err "Python3 is required for testing this project"
+          if confirm "Would you like to install Python3 automatically?"; then
+            if install_dependency_interactive "python3" "$platform"; then
+              ok "Python3 installed successfully!"
+            else
+              exit 1
+            fi
+          else
+            show_installation_recommendations "$platform"
+            exit 1
+          fi
+        fi
+      fi
+      
+      log "Running tests for: $name"
+      
+      # Detect project type and run appropriate tests
+      if [[ -f "package.json" ]]; then
+        # Node.js project
+        if grep -q "jest" package.json; then
+          log "Running Jest tests..."
+          npm test
+        elif grep -q "mocha" package.json; then
+          log "Running Mocha tests..."
+          npm test
+        elif grep -q "vitest" package.json; then
+          log "Running Vitest tests..."
+          npm run test
+        else
+          log "No test framework detected. Available test scripts:"
+          npm run | grep test || echo "No test scripts found"
+        fi
+      elif [[ -f "composer.json" ]]; then
+        # PHP project
+        if grep -q "phpunit/phpunit" composer.json; then
+          log "Running PHPUnit tests..."
+          ./vendor/bin/phpunit
+        elif command -v phpunit &>/dev/null; then
+          log "Running PHPUnit tests..."
+          phpunit
+        else
+          err "PHPUnit not found. Install it with: composer require --dev phpunit/phpunit"
+          exit 1
+        fi
+      elif [[ -f "requirements.txt" ]] || [[ -f "pyproject.toml" ]]; then
+        # Python project
+        if [[ -f "manage.py" ]]; then
+          # Django project
+          log "Running Django tests..."
+          python manage.py test
+        elif command -v pytest &>/dev/null; then
+          log "Running pytest..."
+          pytest
+        elif command -v unittest &>/dev/null; then
+          log "Running unittest..."
+          python -m unittest discover
+        else
+          err "No Python test framework found"
+          exit 1
+        fi
+      else
+        err "No supported test framework found for this project type"
+        exit 1
+      fi
+      ;;
+      
+    deps)
+      local platform=$(detect_platform)
+      log "Checking dependencies for $platform..."
+      
+      if check_and_install_dependencies "$platform"; then
+        ok "All dependencies are satisfied!"
+      else
+        warn "Some dependencies are missing or failed to install"
+        show_installation_recommendations "$platform"
+      fi
+      ;;
+
+    suggest)
+      local action="${2:-}"
+      local platform=$(detect_platform)
+      
+      if [[ -z "$action" ]]; then
+        echo "Usage: supreme suggest <action>"
+        echo
+        echo "Available actions:"
+        echo "  create_laravel    - Show dependencies for Laravel projects"
+        echo "  create_react      - Show dependencies for React projects"
+        echo "  create_vue        - Show dependencies for Vue projects"
+        echo "  create_angular    - Show dependencies for Angular projects"
+        echo "  create_nextjs     - Show dependencies for Next.js projects"
+        echo "  create_django     - Show dependencies for Django projects"
+        echo "  create_flask      - Show dependencies for Flask projects"
+        echo "  create_wordpress  - Show dependencies for WordPress projects"
+        echo "  docker_projects   - Show dependencies for Docker projects"
+        echo "  database_management - Show dependencies for database features"
+        exit 1
+      fi
+      
+      suggest_dependencies_for_action "$action" "$platform"
+      ;;
+
+    enable)
+      if [[ "${2:-}" != "https" ]]; then
+        echo "Usage: supreme enable https"
+        exit 1
+      fi
+      log "Enabling HTTPS globally..."
+      
+      # Create wildcard cert if missing
+      if [[ ! -f "$CERT_DIR/_wildcard.$TLD.pem" ]]; then
+        echo "Wildcard cert not found. Generating..."
+        sudo -u "$(logname)" mkcert -install || true
+        sudo -u "$(logname)" mkcert "*.$TLD"
+        sudo chown root:root "$CERT_DIR"/*.pem || true
+        sudo chmod 644 "$CERT_DIR"/*.pem || true
+        ok "Wildcard cert created."
+      else
+        ok "Wildcard cert already exists."
+      fi
+      
+      # Enable https by setting DEFAULT_PROTOCOL in config
+      sed -i "s/^DEFAULT_PROTOCOL=.*/DEFAULT_PROTOCOL=https/" "$CONFIG"
+      restart_apache
+      ok "HTTPS enabled and Apache restarted."
+      ;;
+      
+    disable)
+      if [[ "${2:-}" != "https" ]]; then
+        echo "Usage: supreme disable https"
+        exit 1
+      fi
+      log "Disabling HTTPS globally..."
+      sed -i "s/^DEFAULT_PROTOCOL=.*/DEFAULT_PROTOCOL=http/" "$CONFIG"
+      restart_apache
+      ok "HTTPS disabled and Apache restarted."
+      ;;
+      
+    list)
+      echo "Projects under $HTDOCS_ROOT:"
+      ls -1 "$HTDOCS_ROOT" || true
+      ;;
+      
+    info)
+      echo "Supreme config:"
+      sed -n '1,200p' "$CONFIG"
+      echo
+      echo "Wildcards:"
+      ls -l "$CERT_DIR" | sed -n '1,200p' || true
+      ;;
+      
+    restart)
+      log "Restarting Apache..."
+      restart_apache
+      ok "Apache restarted."
+      ;;
+      
+    doctor)
+      log "Running health checks..."
+      echo "Platform: $PLATFORM"
+      echo "Vhosts: $VHOSTS_PATH"
+      echo "Webroot: $HTDOCS_ROOT"
+      echo "Cert dir: $CERT_DIR"
+      if command -v mkcert &>/dev/null; then
+        echo "mkcert: installed"
+      else
+        echo "mkcert: not found"
+      fi
+      if [[ -f "$CERT_DIR/_wildcard.$TLD.pem" ]]; then
+        echo "Wildcard cert: present"
+      else
+        echo "Wildcard cert: missing"
+      fi
+      check_database_health
+      ;;
+      
+    uninstall)
+      echo "This will remove supreme configuration files and the CLI. Projects will NOT be deleted."
+      if confirm "Are you sure you want to uninstall supreme?"; then
+        sudo rm -f /usr/local/bin/supreme
+        sudo rm -rf /etc/supreme
+        rm -rf "$HOME/.supreme"
+        echo "Removed supreme binaries and configs. Note: project folders under $HTDOCS_ROOT remain."
+      else
+        echo "Aborted uninstall."
+      fi
+      ;;
+      
+    db)
+      if [[ "$ENABLE_DB" != "Y" ]]; then
+        err "Database management is disabled. Re-run the installer to enable it."
+        exit 1
+      fi
+      
+      case "${2:-}" in
+        create) db_create "${3:-}" ;;
+        drop) db_drop "${3:-}" ;;
+        list) db_list ;;
+        import) db_import "${3:-}" "${4:-}" ;;
+        export) db_export "${3:-}" ;;
+        status) db_status ;;
+        *) echo "Usage: supreme db <create|drop|list|import|export|status> [args]"; exit 1 ;;
+      esac
+      ;;
+      
+    ssl)
+      case "${2:-}" in
+        renew) renew_certificate ;;
+        status) check_certificate_status ;;
+        install) install_ca_certificate ;;
+        *) echo "Usage: supreme ssl <renew|status|install>"; exit 1 ;;
+      esac
+      ;;
+      
+    *)
+      usage
+      ;;
+  esac
+}

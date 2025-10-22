@@ -15,6 +15,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/../modules/database.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../modules/projects.sh"
 # shellcheck source=modules/dependencies.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../modules/dependencies.sh"
+# shellcheck source=modules/sync.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../modules/sync.sh"
 
 # ----------------------
 # CLI Configuration
@@ -52,6 +54,13 @@ Commands:
   restart               Restart Apache
   doctor                Run health checks
   uninstall             Remove supreme (configs and CLI). Does NOT delete your projects unless confirmed.
+
+Cloud Sync Commands:
+  sync setup           Configure cloud sync backend (GitHub/GitLab)
+  sync push             Upload configuration and SSL certs to cloud
+  sync pull             Download and restore configuration from cloud
+  sync status           Show sync status and information
+  sync reset            Clear sync configuration and data
 
 Database Commands (if enabled):
   db create <name>      Create a new database
@@ -588,6 +597,27 @@ handle_command() {
         status) check_certificate_status ;;
         install) install_ca_certificate ;;
         *) echo "Usage: supreme ssl <renew|status|install>"; exit 1 ;;
+      esac
+      ;;
+      
+    sync)
+      case "${2:-}" in
+        setup)
+          echo "Choose sync backend:"
+          echo "1) GitHub (recommended)"
+          echo "2) GitLab"
+          read -rp "Enter choice (1-2): " choice
+          case "$choice" in
+            1) setup_sync_github ;;
+            2) setup_sync_gitlab ;;
+            *) echo "Invalid choice"; exit 1 ;;
+          esac
+          ;;
+        push) sync_push ;;
+        pull) sync_pull ;;
+        status) sync_status ;;
+        reset) sync_reset ;;
+        *) echo "Usage: supreme sync <setup|push|pull|status|reset>"; exit 1 ;;
       esac
       ;;
       

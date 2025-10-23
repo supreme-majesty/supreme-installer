@@ -19,10 +19,18 @@ db_create() {
   
   log "Creating database: $db_name"
   
-  if [[ "$DB_ROOT_PASSWORD" == "REQUIRED" ]]; then
-    $DB_CMD -u "$DB_ROOT_USER" -p -e "CREATE DATABASE IF NOT EXISTS \`$db_name\`;"
+  if [[ "$DB_TYPE" == "postgresql" ]]; then
+    if [[ "$DB_ROOT_PASSWORD" == "REQUIRED" ]]; then
+      PGPASSWORD="$DB_ROOT_PASSWORD" $DB_CMD -U "$DB_ROOT_USER" -c "CREATE DATABASE \"$db_name\";"
+    else
+      $DB_CMD -U "$DB_ROOT_USER" -c "CREATE DATABASE \"$db_name\";"
+    fi
   else
-    $DB_CMD -u "$DB_ROOT_USER" -e "CREATE DATABASE IF NOT EXISTS \`$db_name\`;"
+    if [[ "$DB_ROOT_PASSWORD" == "REQUIRED" ]]; then
+      $DB_CMD -u "$DB_ROOT_USER" -p -e "CREATE DATABASE IF NOT EXISTS \`$db_name\`;"
+    else
+      $DB_CMD -u "$DB_ROOT_USER" -e "CREATE DATABASE IF NOT EXISTS \`$db_name\`;"
+    fi
   fi
   
   ok "Database '$db_name' created successfully"
@@ -43,10 +51,18 @@ db_drop() {
   
   log "Dropping database: $db_name"
   
-  if [[ "$DB_ROOT_PASSWORD" == "REQUIRED" ]]; then
-    $DB_CMD -u "$DB_ROOT_USER" -p -e "DROP DATABASE IF EXISTS \`$db_name\`;"
+  if [[ "$DB_TYPE" == "postgresql" ]]; then
+    if [[ "$DB_ROOT_PASSWORD" == "REQUIRED" ]]; then
+      PGPASSWORD="$DB_ROOT_PASSWORD" $DB_CMD -U "$DB_ROOT_USER" -c "DROP DATABASE IF EXISTS \"$db_name\";"
+    else
+      $DB_CMD -U "$DB_ROOT_USER" -c "DROP DATABASE IF EXISTS \"$db_name\";"
+    fi
   else
-    $DB_CMD -u "$DB_ROOT_USER" -e "DROP DATABASE IF EXISTS \`$db_name\`;"
+    if [[ "$DB_ROOT_PASSWORD" == "REQUIRED" ]]; then
+      $DB_CMD -u "$DB_ROOT_USER" -p -e "DROP DATABASE IF EXISTS \`$db_name\`;"
+    else
+      $DB_CMD -u "$DB_ROOT_USER" -e "DROP DATABASE IF EXISTS \`$db_name\`;"
+    fi
   fi
   
   ok "Database '$db_name' dropped successfully"
@@ -55,10 +71,18 @@ db_drop() {
 db_list() {
   log "Available databases:"
   
-  if [[ "$DB_ROOT_PASSWORD" == "REQUIRED" ]]; then
-    $DB_CMD -u "$DB_ROOT_USER" -p -e "SHOW DATABASES;" | grep -v -E "^(Database|information_schema|performance_schema|mysql|sys)$"
+  if [[ "$DB_TYPE" == "postgresql" ]]; then
+    if [[ "$DB_ROOT_PASSWORD" == "REQUIRED" ]]; then
+      PGPASSWORD="$DB_ROOT_PASSWORD" $DB_CMD -U "$DB_ROOT_USER" -c "\l" | grep -v -E "^(List|template|postgres)$" | awk 'NR>2 {print $1}' | grep -v '^$'
+    else
+      $DB_CMD -U "$DB_ROOT_USER" -c "\l" | grep -v -E "^(List|template|postgres)$" | awk 'NR>2 {print $1}' | grep -v '^$'
+    fi
   else
-    $DB_CMD -u "$DB_ROOT_USER" -e "SHOW DATABASES;" | grep -v -E "^(Database|information_schema|performance_schema|mysql|sys)$"
+    if [[ "$DB_ROOT_PASSWORD" == "REQUIRED" ]]; then
+      $DB_CMD -u "$DB_ROOT_USER" -p -e "SHOW DATABASES;" | grep -v -E "^(Database|information_schema|performance_schema|mysql|phpmyadmin|test)$"
+    else
+      $DB_CMD -u "$DB_ROOT_USER" -e "SHOW DATABASES;" | grep -v -E "^(Database|information_schema|performance_schema|mysql|phpmyadmin|test)$"
+    fi
   fi
 }
 

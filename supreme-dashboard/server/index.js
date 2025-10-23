@@ -9,6 +9,16 @@ import { promisify } from 'util';
 import bcrypt from 'bcrypt';
 import { generateToken, verifyToken, authenticateToken, requireRole, users } from './middleware/auth.js';
 import { validateLogin, validateRegister, validateProjectName, sanitizeInput } from './middleware/validation.js';
+import { 
+  initializeDatabase, 
+  getDatabases, 
+  getTables, 
+  executeCustomQuery, 
+  getTableStructure, 
+  createDatabase, 
+  deleteDatabase, 
+  testConnection 
+} from './middleware/database.js';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
@@ -32,6 +42,9 @@ await fastify.register(cors, {
 
 // Register global middleware
 fastify.addHook('preHandler', sanitizeInput);
+
+// Initialize database connection
+const dbInitialized = initializeDatabase();
 
 // Register static file serving for production
 await fastify.register(staticFiles, {
@@ -485,16 +498,27 @@ fastify.get('/api/stats', { preHandler: authenticateToken }, async (request, rep
 // Database Management endpoints
 fastify.get('/api/database/databases', { preHandler: authenticateToken }, async (request, reply) => {
   try {
-    // Mock database list - In production, connect to actual database
-    const databases = [
-      { name: 'supreme_dev', size: '2.5 MB', created: '2024-01-15' },
-      { name: 'test_db', size: '1.2 MB', created: '2024-01-20' },
-      { name: 'project_alpha', size: '5.8 MB', created: '2024-02-01' }
-    ];
+    console.log('📊 Database request received from user:', request.user.username);
     
-    return { databases };
+    if (!dbInitialized) {
+      console.log('⚠️ Database not initialized, returning mock data');
+      // Fallback to mock data if database not initialized
+      const databases = [
+        { name: 'supreme_dev', size: '2.5 MB', created: '2024-01-15' },
+        { name: 'test_db', size: '1.2 MB', created: '2024-01-20' },
+        { name: 'project_alpha', size: '5.8 MB', created: '2024-02-01' }
+      ];
+      return { databases, mock: true };
+    }
+    
+    console.log('🔍 Fetching real database data...');
+    const databases = await getDatabases();
+    console.log(`✅ Successfully fetched ${databases.length} databases`);
+    return { databases, mock: false };
   } catch (error) {
-    return reply.code(500).send({ error: 'Failed to fetch databases' });
+    console.error('❌ Error fetching databases:', error.message);
+    console.error('Stack trace:', error.stack);
+    return reply.code(500).send({ error: 'Failed to fetch databases', details: error.message });
   }
 });
 
@@ -502,16 +526,21 @@ fastify.get('/api/database/tables/:database', { preHandler: authenticateToken },
   try {
     const { database } = request.params;
     
-    // Mock table list - In production, query actual database
-    const tables = [
-      { name: 'users', rows: 150, type: 'table' },
-      { name: 'projects', rows: 25, type: 'table' },
-      { name: 'logs', rows: 1200, type: 'table' },
-      { name: 'settings', rows: 5, type: 'table' }
-    ];
+    if (!dbInitialized) {
+      // Fallback to mock data if database not initialized
+      const tables = [
+        { name: 'users', rows: 150, type: 'table' },
+        { name: 'projects', rows: 25, type: 'table' },
+        { name: 'logs', rows: 1200, type: 'table' },
+        { name: 'settings', rows: 5, type: 'table' }
+      ];
+      return { tables, mock: true };
+    }
     
-    return { tables };
+    const tables = await getTables(database);
+    return { tables, mock: false };
   } catch (error) {
+    console.error('Error fetching tables:', error);
     return reply.code(500).send({ error: 'Failed to fetch tables' });
   }
 });
@@ -524,31 +553,34 @@ fastify.post('/api/database/query', { preHandler: authenticateToken }, async (re
       return reply.code(400).send({ error: 'Database and query are required' });
     }
     
-    // Mock query execution - In production, execute actual SQL
-    const startTime = Date.now();
-    
-    // Simulate query execution time
-    await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200));
-    
-    const executionTime = Date.now() - startTime;
-    
-    // Mock result based on query type
-    let rows = [];
-    if (query.toLowerCase().includes('select')) {
-      rows = [
-        { id: 1, name: 'John Doe', email: 'john@example.com', created_at: '2024-01-15' },
-        { id: 2, name: 'Jane Smith', email: 'jane@example.com', created_at: '2024-01-16' },
-        { id: 3, name: 'Bob Johnson', email: 'bob@example.com', created_at: '2024-01-17' }
-      ];
+    if (!dbInitialized) {
+      // Fallback to mock data if database not initialized
+      const startTime = Date.now();
+      await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200));
+      const executionTime = Date.now() - startTime;
+      
+      let rows = [];
+      if (query.toLowerCase().includes('select')) {
+        rows = [
+          { id: 1, name: 'John Doe', email: 'john@example.com', created_at: '2024-01-15' },
+          { id: 2, name: 'Jane Smith', email: 'jane@example.com', created_at: '2024-01-16' },
+          { id: 3, name: 'Bob Johnson', email: 'bob@example.com', created_at: '2024-01-17' }
+        ];
+      }
+      
+      return {
+        success: true,
+        rows,
+        executionTime,
+        affectedRows: rows.length,
+        mock: true
+      };
     }
     
-    return {
-      success: true,
-      rows,
-      executionTime,
-      affectedRows: rows.length
-    };
+    const result = await executeCustomQuery(database, query);
+    return { ...result, mock: false };
   } catch (error) {
+    console.error('Error executing query:', error);
     return reply.code(500).send({ error: 'Query execution failed' });
   }
 });
@@ -557,22 +589,28 @@ fastify.get('/api/database/table-structure/:database/:table', { preHandler: auth
   try {
     const { database, table } = request.params;
     
-    // Mock table structure - In production, query actual table schema
-    const structure = {
-      columns: [
-        { name: 'id', type: 'INT', nullable: false, key: 'PRI', default: null },
-        { name: 'name', type: 'VARCHAR(255)', nullable: false, key: '', default: null },
-        { name: 'email', type: 'VARCHAR(255)', nullable: false, key: 'UNI', default: null },
-        { name: 'created_at', type: 'TIMESTAMP', nullable: false, key: '', default: 'CURRENT_TIMESTAMP' }
-      ],
-      indexes: [
-        { name: 'PRIMARY', columns: ['id'], type: 'BTREE' },
-        { name: 'email_unique', columns: ['email'], type: 'BTREE' }
-      ]
-    };
+    if (!dbInitialized) {
+      // Fallback to mock data if database not initialized
+      const structure = {
+        columns: [
+          { name: 'id', type: 'INT', nullable: false, key: 'PRI', default: null },
+          { name: 'name', type: 'VARCHAR(255)', nullable: false, key: '', default: null },
+          { name: 'email', type: 'VARCHAR(255)', nullable: false, key: 'UNI', default: null },
+          { name: 'created_at', type: 'TIMESTAMP', nullable: false, key: '', default: 'CURRENT_TIMESTAMP' }
+        ],
+        indexes: [
+          { name: 'PRIMARY', columns: ['id'], type: 'BTREE' },
+          { name: 'email_unique', columns: ['email'], type: 'BTREE' }
+        ],
+        mock: true
+      };
+      return structure;
+    }
     
-    return structure;
+    const structure = await getTableStructure(database, table);
+    return { ...structure, mock: false };
   } catch (error) {
+    console.error('Error fetching table structure:', error);
     return reply.code(500).send({ error: 'Failed to fetch table structure' });
   }
 });
@@ -585,12 +623,18 @@ fastify.post('/api/database/create', { preHandler: [authenticateToken, requireRo
       return reply.code(400).send({ error: 'Invalid database name' });
     }
     
-    // Mock database creation - In production, create actual database
-    return {
-      success: true,
-      message: `Database '${name}' created successfully`
-    };
+    if (!dbInitialized) {
+      return {
+        success: true,
+        message: `Database '${name}' created successfully (mock)`,
+        mock: true
+      };
+    }
+    
+    const result = await createDatabase(name);
+    return { ...result, mock: false };
   } catch (error) {
+    console.error('Error creating database:', error);
     return reply.code(500).send({ error: 'Failed to create database' });
   }
 });
@@ -599,13 +643,38 @@ fastify.delete('/api/database/delete/:name', { preHandler: [authenticateToken, r
   try {
     const { name } = request.params;
     
-    // Mock database deletion - In production, delete actual database
-    return {
-      success: true,
-      message: `Database '${name}' deleted successfully`
-    };
+    if (!dbInitialized) {
+      return {
+        success: true,
+        message: `Database '${name}' deleted successfully (mock)`,
+        mock: true
+      };
+    }
+    
+    const result = await deleteDatabase(name);
+    return { ...result, mock: false };
   } catch (error) {
+    console.error('Error deleting database:', error);
     return reply.code(500).send({ error: 'Failed to delete database' });
+  }
+});
+
+// Database status endpoint
+fastify.get('/api/database/status', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    if (!dbInitialized) {
+      return {
+        connected: false,
+        type: 'none',
+        message: 'Database not initialized - using mock data'
+      };
+    }
+    
+    const status = await testConnection();
+    return status;
+  } catch (error) {
+    console.error('Error checking database status:', error);
+    return reply.code(500).send({ error: 'Failed to check database status' });
   }
 });
 

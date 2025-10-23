@@ -129,11 +129,22 @@ detect_database() {
   
   case "$PLATFORM" in
     macos)
-      if [[ -f "/usr/local/bin/mysql" ]]; then
+      # Check for PostgreSQL first
+      if command -v psql &>/dev/null; then
+        DB_HOST="localhost"
+        DB_PORT="5432"
+        DB_ROOT_USER="postgres"
+        DB_CMD="psql"
+        DB_TYPE="postgresql"
+        DB_SERVICE_CMD="brew services"
+        ok "Detected Homebrew PostgreSQL"
+        return 0
+      elif [[ -f "/usr/local/bin/mysql" ]]; then
         DB_HOST="localhost"
         DB_PORT="3306"
         DB_ROOT_USER="root"
         DB_CMD="mysql"
+        DB_TYPE="mysql"
         DB_SERVICE_CMD="brew services"
         ok "Detected Homebrew MySQL"
         return 0
@@ -145,6 +156,20 @@ detect_database() {
       if [[ -n "$SYSTEMDRIVE" ]]; then
         drive_letter="${SYSTEMDRIVE:0:1}"
       fi
+      
+      # Check for PostgreSQL first
+      if command -v psql &>/dev/null; then
+        DB_HOST="localhost"
+        DB_PORT="5432"
+        DB_ROOT_USER="postgres"
+        DB_ROOT_PASSWORD=""
+        DB_CMD="psql"
+        DB_TYPE="postgresql"
+        DB_SERVICE_CMD="net"
+        ok "Detected PostgreSQL on Windows"
+        return 0
+      fi
+      
       local mysql_path="/${drive_letter,,}/xampp/mysql/bin/mysql.exe"
       if [[ -f "$mysql_path" ]]; then
         DB_HOST="localhost"
@@ -152,12 +177,40 @@ detect_database() {
         DB_ROOT_USER="root"
         DB_ROOT_PASSWORD=""
         DB_CMD="$mysql_path"
+        DB_TYPE="mysql"
         DB_SERVICE_CMD="net"
         ok "Detected XAMPP MySQL on Windows"
         return 0
       fi
       ;;
     wsl)
+      # Check for PostgreSQL first
+      if command -v psql &>/dev/null; then
+        DB_HOST="localhost"
+        DB_PORT="5432"
+        DB_ROOT_USER="postgres"
+        DB_CMD="psql"
+        DB_TYPE="postgresql"
+        
+        # Try to detect if password is required
+        if psql -U postgres -c "SELECT 1;" &>/dev/null; then
+          DB_ROOT_PASSWORD=""
+        else
+          log "PostgreSQL password required. You'll need to enter it when using database commands."
+          DB_ROOT_PASSWORD="REQUIRED"
+        fi
+        
+        local service_mgr=$(detect_service_manager)
+        case "$service_mgr" in
+          systemctl) DB_SERVICE_CMD="sudo systemctl" ;;
+          service) DB_SERVICE_CMD="sudo service" ;;
+          openrc) DB_SERVICE_CMD="sudo rc-service" ;;
+          *) DB_SERVICE_CMD="sudo systemctl" ;;
+        esac
+        ok "Detected system PostgreSQL"
+        return 0
+      fi
+      
       # Check for Linux XAMPP first
       if [[ -d "/opt/lampp" ]] && [[ -f "/opt/lampp/bin/mysql" ]]; then
         DB_HOST="localhost"
@@ -165,6 +218,7 @@ detect_database() {
         DB_ROOT_USER="root"
         DB_ROOT_PASSWORD=""
         DB_CMD="/opt/lampp/bin/mysql"
+        DB_TYPE="mysql"
         DB_SERVICE_CMD="sudo /opt/lampp/lampp"
         ok "Detected XAMPP MySQL on WSL"
         return 0
@@ -182,6 +236,7 @@ detect_database() {
         DB_ROOT_USER="root"
         DB_ROOT_PASSWORD=""
         DB_CMD="$windows_mysql"
+        DB_TYPE="mysql"
         DB_SERVICE_CMD="sudo systemctl"
         ok "Detected Windows XAMPP MySQL in WSL"
         return 0
@@ -193,6 +248,7 @@ detect_database() {
         DB_PORT="3306"
         DB_ROOT_USER="root"
         DB_CMD="mysql"
+        DB_TYPE="mysql"
         
         # Try to detect if password is required
         if mysql -u root -e "SELECT 1;" &>/dev/null; then
@@ -214,6 +270,33 @@ detect_database() {
       fi
       ;;
     linux)
+      # Check for PostgreSQL first
+      if command -v psql &>/dev/null; then
+        DB_HOST="localhost"
+        DB_PORT="5432"
+        DB_ROOT_USER="postgres"
+        DB_CMD="psql"
+        DB_TYPE="postgresql"
+        
+        # Try to detect if password is required
+        if psql -U postgres -c "SELECT 1;" &>/dev/null; then
+          DB_ROOT_PASSWORD=""
+        else
+          log "PostgreSQL password required. You'll need to enter it when using database commands."
+          DB_ROOT_PASSWORD="REQUIRED"
+        fi
+        
+        local service_mgr=$(detect_service_manager)
+        case "$service_mgr" in
+          systemctl) DB_SERVICE_CMD="sudo systemctl" ;;
+          service) DB_SERVICE_CMD="sudo service" ;;
+          openrc) DB_SERVICE_CMD="sudo rc-service" ;;
+          *) DB_SERVICE_CMD="sudo systemctl" ;;
+        esac
+        ok "Detected system PostgreSQL"
+        return 0
+      fi
+      
       # Check for XAMPP MySQL
       if [[ -d "/opt/lampp" ]] && [[ -f "/opt/lampp/bin/mysql" ]]; then
         DB_HOST="localhost"
@@ -221,6 +304,7 @@ detect_database() {
         DB_ROOT_USER="root"
         DB_ROOT_PASSWORD=""
         DB_CMD="/opt/lampp/bin/mysql"
+        DB_TYPE="mysql"
         DB_SERVICE_CMD="sudo /opt/lampp/lampp"
         ok "Detected XAMPP MySQL"
         return 0
@@ -232,6 +316,7 @@ detect_database() {
         DB_PORT="3306"
         DB_ROOT_USER="root"
         DB_CMD="mysql"
+        DB_TYPE="mysql"
         
         # Try to detect if password is required
         if mysql -u root -e "SELECT 1;" &>/dev/null; then
@@ -254,6 +339,6 @@ detect_database() {
       ;;
   esac
   
-  err "No MySQL/MariaDB installation detected. Database management will be disabled."
+  err "No MySQL/MariaDB or PostgreSQL installation detected. Database management will be disabled."
   ENABLE_DB="N"
 }

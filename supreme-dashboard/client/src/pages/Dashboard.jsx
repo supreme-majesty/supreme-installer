@@ -171,7 +171,7 @@ const Dashboard = () => {
       {/* Stats Cards */}
       <div className="dashboard-grid">
         <div className="dashboard-card stat-card">
-          <div className="stat-value">{stats?.projects.total || 12}</div>
+          <div className="stat-value">{stats?.projects.total || 0}</div>
           <div className="stat-label">Total Projects</div>
           <div className="stat-change positive">
             <span>↗</span>

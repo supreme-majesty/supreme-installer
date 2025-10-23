@@ -7,7 +7,15 @@
   "scripts": {
     "dev": "node --watch index.js",
     "build": "echo 'Server build complete'",
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "jest --testPathPattern=tests --verbose",
+    "test:watch": "jest --testPathPattern=tests --watch",
+    "test:coverage": "jest --testPathPattern=tests --coverage",
+    "test:server": "NODE_ENV=test node index.js",
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix",
+    "security:audit": "npm audit",
+    "security:check": "npm audit --audit-level moderate"
   },
   "dependencies": {
     "@fastify/cors": "^8.4.0",
@@ -17,6 +25,50 @@
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.15.3",
     "pg": "^8.16.3",
-    "pino-pretty": "^10.2.3"
+    "pino-pretty": "^10.2.3",
+    "zod": "^3.22.4",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.1.5",
+    "compression": "^1.7.4",
+    "node-cache": "^5.1.2",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "@jest/globals": "^29.7.0",
+    "supertest": "^6.3.3",
+    "node-fetch": "^3.3.2",
+    "eslint": "^8.55.0",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.29.0",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^6.1.1",
+    "eslint-plugin-security": "^1.7.1",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/tests/**/*.test.js"],
+    "collectCoverageFrom": [
+      "**/*.js",
+      "!**/node_modules/**",
+      "!**/tests/**",
+      "!**/coverage/**"
+    ],
+    "coverageReporters": ["text", "lcov", "html"],
+    "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"]
+  },
+  "lint-staged": {
+    "*.js": [
+      "eslint --fix",
+      "git add"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged",
+      "pre-push": "npm run test"
+    }
   }
 }

@@ -20,10 +20,26 @@ configure_platform() {
       HTDOCS_ROOT_DEFAULT="/usr/local/var/www"
       ;;
     windows)
-      VHOSTS_PATH_CANDIDATE="/c/xampp/apache/conf/extra/httpd-vhosts.conf"
+      # Detect drive letter and use appropriate paths
+      local drive_letter="C"
+      if [[ -n "$SYSTEMDRIVE" ]]; then
+        drive_letter="${SYSTEMDRIVE:0:1}"
+      fi
+      VHOSTS_PATH_CANDIDATE="/${drive_letter,,}/xampp/apache/conf/extra/httpd-vhosts.conf"
       APACHE_RESTART_CMD="net stop apache2.4 && net start apache2.4"
-      CERT_ROOT="/c/xampp/apache/conf/ssl"
-      HTDOCS_ROOT_DEFAULT="/c/xampp/htdocs"
+      CERT_ROOT="/${drive_letter,,}/xampp/apache/conf/ssl"
+      HTDOCS_ROOT_DEFAULT="/${drive_letter,,}/xampp/htdocs"
+      ;;
+    wsl)
+      # WSL: Use Windows paths mounted in WSL
+      local drive_letter="C"
+      if [[ -n "$SYSTEMDRIVE" ]]; then
+        drive_letter="${SYSTEMDRIVE:0:1}"
+      fi
+      VHOSTS_PATH_CANDIDATE="/mnt/${drive_letter,,}/xampp/apache/conf/extra/httpd-vhosts.conf"
+      APACHE_RESTART_CMD="sudo systemctl restart apache2 || sudo service apache2 restart"
+      CERT_ROOT="/mnt/${drive_letter,,}/xampp/apache/conf/ssl"
+      HTDOCS_ROOT_DEFAULT="/mnt/${drive_letter,,}/xampp/htdocs"
       ;;
     linux)
       HTDOCS_ROOT_DEFAULT="/opt/lampp/htdocs"
@@ -41,7 +57,7 @@ detect_apache_config() {
   APACHE_RESTART_CMD=""
   CERT_ROOT=""
   
-  if [[ "$PLATFORM" == "linux" ]]; then
+  if [[ "$PLATFORM" == "linux" ]] || [[ "$PLATFORM" == "wsl" ]]; then
     # Check for XAMPP first
     if [[ -d "/opt/lampp" ]]; then
       if [[ -f "/opt/lampp/etc/extra/httpd-vhosts.conf" ]]; then
@@ -54,6 +70,23 @@ detect_apache_config() {
         APACHE_RESTART_CMD="sudo /opt/lampp/lampp restart"
         CERT_ROOT="/opt/lampp/etc/ssl"
         HTDOCS_ROOT_DEFAULT="/opt/lampp/htdocs"
+      fi
+    fi
+    
+    # For WSL, also check Windows XAMPP installation
+    if [[ "$PLATFORM" == "wsl" ]] && [[ -z "${VHOSTS_PATH:-}" ]]; then
+      local drive_letter="C"
+      if [[ -n "$SYSTEMDRIVE" ]]; then
+        drive_letter="${SYSTEMDRIVE:0:1}"
+      fi
+      local windows_xampp="/mnt/${drive_letter,,}/xampp"
+      if [[ -d "$windows_xampp" ]]; then
+        if [[ -f "$windows_xampp/apache/conf/extra/httpd-vhosts.conf" ]]; then
+          VHOSTS_PATH="$windows_xampp/apache/conf/extra/httpd-vhosts.conf"
+          APACHE_RESTART_CMD="sudo systemctl restart apache2 || sudo service apache2 restart"
+          CERT_ROOT="$windows_xampp/apache/conf/ssl"
+          HTDOCS_ROOT_DEFAULT="$windows_xampp/htdocs"
+        fi
       fi
     fi
     
@@ -107,14 +140,76 @@ detect_database() {
       fi
       ;;
     windows)
-      if [[ -f "/c/xampp/mysql/bin/mysql.exe" ]]; then
+      # Detect drive letter and check for XAMPP MySQL
+      local drive_letter="C"
+      if [[ -n "$SYSTEMDRIVE" ]]; then
+        drive_letter="${SYSTEMDRIVE:0:1}"
+      fi
+      local mysql_path="/${drive_letter,,}/xampp/mysql/bin/mysql.exe"
+      if [[ -f "$mysql_path" ]]; then
         DB_HOST="localhost"
         DB_PORT="3306"
         DB_ROOT_USER="root"
         DB_ROOT_PASSWORD=""
-        DB_CMD="/c/xampp/mysql/bin/mysql.exe"
+        DB_CMD="$mysql_path"
         DB_SERVICE_CMD="net"
         ok "Detected XAMPP MySQL on Windows"
+        return 0
+      fi
+      ;;
+    wsl)
+      # Check for Linux XAMPP first
+      if [[ -d "/opt/lampp" ]] && [[ -f "/opt/lampp/bin/mysql" ]]; then
+        DB_HOST="localhost"
+        DB_PORT="3306"
+        DB_ROOT_USER="root"
+        DB_ROOT_PASSWORD=""
+        DB_CMD="/opt/lampp/bin/mysql"
+        DB_SERVICE_CMD="sudo /opt/lampp/lampp"
+        ok "Detected XAMPP MySQL on WSL"
+        return 0
+      fi
+      
+      # Check for Windows XAMPP mounted in WSL
+      local drive_letter="C"
+      if [[ -n "$SYSTEMDRIVE" ]]; then
+        drive_letter="${SYSTEMDRIVE:0:1}"
+      fi
+      local windows_mysql="/mnt/${drive_letter,,}/xampp/mysql/bin/mysql.exe"
+      if [[ -f "$windows_mysql" ]]; then
+        DB_HOST="localhost"
+        DB_PORT="3306"
+        DB_ROOT_USER="root"
+        DB_ROOT_PASSWORD=""
+        DB_CMD="$windows_mysql"
+        DB_SERVICE_CMD="sudo systemctl"
+        ok "Detected Windows XAMPP MySQL in WSL"
+        return 0
+      fi
+      
+      # Check for system MySQL/MariaDB
+      if command -v mysql &>/dev/null; then
+        DB_HOST="localhost"
+        DB_PORT="3306"
+        DB_ROOT_USER="root"
+        DB_CMD="mysql"
+        
+        # Try to detect if password is required
+        if mysql -u root -e "SELECT 1;" &>/dev/null; then
+          DB_ROOT_PASSWORD=""
+        else
+          log "MySQL root password required. You'll need to enter it when using database commands."
+          DB_ROOT_PASSWORD="REQUIRED"
+        fi
+        
+        local service_mgr=$(detect_service_manager)
+        case "$service_mgr" in
+          systemctl) DB_SERVICE_CMD="sudo systemctl" ;;
+          service) DB_SERVICE_CMD="sudo service" ;;
+          openrc) DB_SERVICE_CMD="sudo rc-service" ;;
+          *) DB_SERVICE_CMD="sudo systemctl" ;;
+        esac
+        ok "Detected system MySQL/MariaDB"
         return 0
       fi
       ;;
@@ -146,11 +241,13 @@ detect_database() {
           DB_ROOT_PASSWORD="REQUIRED"
         fi
         
-        if command -v systemctl &>/dev/null; then
-          DB_SERVICE_CMD="sudo systemctl"
-        else
-          DB_SERVICE_CMD="sudo service"
-        fi
+        local service_mgr=$(detect_service_manager)
+        case "$service_mgr" in
+          systemctl) DB_SERVICE_CMD="sudo systemctl" ;;
+          service) DB_SERVICE_CMD="sudo service" ;;
+          openrc) DB_SERVICE_CMD="sudo rc-service" ;;
+          *) DB_SERVICE_CMD="sudo systemctl" ;;
+        esac
         ok "Detected system MySQL/MariaDB"
         return 0
       fi

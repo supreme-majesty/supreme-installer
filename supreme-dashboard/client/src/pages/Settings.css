@@ -1,0 +1,285 @@
+/* Settings Specific Styles */
+.settings {
+  padding: 0;
+}
+
+/* Message Display */
+.message {
+  padding: 16px 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  font-weight: 500;
+  animation: slideInDown 0.3s ease-out;
+}
+
+.message.success {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+
+.message.error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.message.info {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #3b82f6;
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Settings Container */
+.settings-container {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+/* Settings Tabs */
+.settings-tabs .dashboard-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.tab-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: left;
+  width: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tab-button:last-child {
+  border-bottom: none;
+}
+
+.tab-button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+}
+
+.tab-button.active {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.2), rgba(124, 58, 237, 0.2));
+  color: white;
+  border-right: 3px solid #4f46e5;
+}
+
+.tab-icon {
+  font-size: 1.25rem;
+  min-width: 24px;
+}
+
+.tab-label {
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+/* Settings Content */
+.settings-content .dashboard-card {
+  padding: 32px;
+}
+
+.settings-section h3 {
+  color: white;
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Form Grid */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-label {
+  color: white;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.form-input {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: white;
+  padding: 12px 16px;
+  font-size: 0.875rem;
+  transition: all 0.3s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.form-input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Checkbox Group */
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #4f46e5;
+  cursor: pointer;
+}
+
+.checkbox-group label {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.875rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Form Help Text */
+.form-help {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.75rem;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* Settings Actions */
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-actions .btn {
+  min-width: 120px;
+}
+
+.settings-actions .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Inline Actions */
+.settings-actions-inline {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-actions-inline .btn {
+  min-width: auto;
+  padding: 0.75rem 1.5rem;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .settings-container {
+    grid-template-columns: 200px 1fr;
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .settings-container {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .settings-tabs .dashboard-card {
+    margin-bottom: 0;
+  }
+  
+  .tab-list {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  
+  .tab-button {
+    min-width: 120px;
+    justify-content: center;
+    border-bottom: none;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .tab-button:last-child {
+    border-right: none;
+  }
+  
+  .tab-label {
+    display: none;
+  }
+  
+  .settings-content .dashboard-card {
+    padding: 20px;
+  }
+  
+  .settings-actions {
+    flex-direction: column;
+  }
+  
+  .settings-actions .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-content .dashboard-card {
+    padding: 16px;
+  }
+  
+  .settings-section h3 {
+    font-size: 1.25rem;
+  }
+  
+  .form-grid {
+    gap: 16px;
+  }
+}

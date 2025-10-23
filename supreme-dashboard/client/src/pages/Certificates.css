@@ -1,0 +1,504 @@
+/* Certificates Page Styles */
+.certificates {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.certificates-loading,
+.certificates-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-left: 4px solid #4f46e5;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.error-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.certificates-error h3 {
+  color: #ef4444;
+  margin-bottom: 0.5rem;
+}
+
+.certificates-error p {
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 1.5rem;
+}
+
+/* SSL Overview */
+.ssl-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.ssl-status-card,
+.certificate-info-card,
+.no-certificate-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.ssl-status-card:hover,
+.certificate-info-card:hover,
+.no-certificate-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+}
+
+.status-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.status-icon {
+  font-size: 2.5rem;
+  margin-right: 1rem;
+}
+
+.status-info h3 {
+  color: white;
+  margin: 0 0 0.25rem 0;
+  font-size: 1.25rem;
+}
+
+.status-text {
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.status-text.enabled {
+  color: #10b981;
+}
+
+.status-text.disabled {
+  color: #ef4444;
+}
+
+.status-actions {
+  margin-top: 1rem;
+}
+
+.cert-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.cert-header h3 {
+  color: white;
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.cert-domain {
+  background: rgba(79, 70, 229, 0.2);
+  color: #4f46e5;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9rem;
+  border: 1px solid rgba(79, 70, 229, 0.3);
+}
+
+.cert-details {
+  margin-bottom: 1.5rem;
+}
+
+.cert-detail {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.detail-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.detail-value {
+  color: white;
+  font-size: 0.9rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.detail-value.expired {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.detail-value.warning {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.detail-value.caution {
+  color: #f97316;
+  font-weight: 600;
+}
+
+.detail-value.good {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.cert-actions {
+  margin-top: 1rem;
+}
+
+.no-certificate-card {
+  text-align: center;
+}
+
+.no-cert-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.no-certificate-card h3 {
+  color: #f59e0b;
+  margin-bottom: 0.5rem;
+}
+
+.no-certificate-card p {
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 1.5rem;
+}
+
+/* Certificate Details */
+.certificate-details {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.certificate-details h3 {
+  color: white;
+  margin-bottom: 1.5rem;
+  font-size: 1.25rem;
+}
+
+.cert-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.cert-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.cert-item-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.cert-item-icon {
+  font-size: 1.25rem;
+  margin-right: 0.75rem;
+}
+
+.cert-item-title {
+  color: white;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.cert-item-content {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.validity-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.validity-progress {
+  height: 100%;
+  background: linear-gradient(90deg, #ef4444 0%, #f59e0b 50%, #10b981 100%);
+  transition: width 0.3s ease;
+}
+
+.validity-text {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.domain-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.domain-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+}
+
+.domain-wildcard,
+.domain-root {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9rem;
+  color: white;
+}
+
+.domain-status {
+  color: #10b981;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.cert-type-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.type-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.type-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+}
+
+.type-value {
+  color: white;
+  font-size: 0.9rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+/* Quick Actions */
+.quick-actions {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.quick-actions h3 {
+  color: white;
+  margin-bottom: 1rem;
+  font-size: 1.25rem;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* Help Section */
+.help-section {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.help-section h3 {
+  color: white;
+  margin-bottom: 1.5rem;
+  font-size: 1.25rem;
+}
+
+.help-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.help-item {
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.help-item h4 {
+  color: white;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+}
+
+.help-item p {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #4f46e5;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #4338ca;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.btn-success {
+  background: #10b981;
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #059669;
+  transform: translateY(-1px);
+}
+
+.btn-danger {
+  background: #ef4444;
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
+.btn-info {
+  background: #06b6d4;
+  color: white;
+}
+
+.btn-info:hover:not(:disabled) {
+  background: #0891b2;
+  transform: translateY(-1px);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .certificates {
+    padding: 1rem;
+  }
+  
+  .ssl-overview {
+    grid-template-columns: 1fr;
+  }
+  
+  .cert-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+  }
+  
+  .btn {
+    justify-content: center;
+  }
+  
+  .help-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .cert-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .cert-detail {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .domain-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+  
+  .type-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

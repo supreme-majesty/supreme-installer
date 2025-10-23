@@ -85,7 +85,8 @@ SSL_DIR="$CERT_ROOT/$PROJECT_FOLDER"
 HTDOCS_DIR="$HTDOCS_ROOT_DEFAULT/$PROJECT_FOLDER"
 SUPREME_DIR="/opt/supreme"
 SYS_CONF="/etc/supreme"
-USER_CONF_FILE="$HOME/.supreme/config.env"
+# Use the new config path function
+USER_CONF_FILE=$(get_config_path)
 
 # Database configuration
 DB_HOST="localhost"

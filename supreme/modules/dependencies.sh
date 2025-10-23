@@ -13,6 +13,7 @@ declare -A DEPENDENCIES=(
   ["xampp"]="XAMPP (Apache + MySQL + PHP bundle)"
   ["apache"]="Apache web server (system)"
   ["mysql"]="MySQL database server (system)"
+  ["postgresql"]="PostgreSQL database server (system)"
   ["php"]="PHP runtime (system)"
   ["composer"]="PHP dependency manager"
   ["node"]="Node.js runtime"
@@ -31,6 +32,12 @@ declare -A PACKAGE_MANAGERS=(
   ["yum"]="yum"
   ["dnf"]="dnf"
   ["pacman"]="pacman"
+  ["apk"]="apk"
+  ["emerge"]="emerge"
+  ["zypper"]="zypper"
+  ["snap"]="snap"
+  ["flatpak"]="flatpak"
+  ["nix"]="nix"
   ["brew"]="brew"
   ["choco"]="chocolatey"
   ["winget"]="winget"
@@ -43,7 +50,8 @@ detect_package_manager() {
   local platform="$1"
   
   case "$platform" in
-    linux)
+    linux|wsl)
+      # Check for traditional package managers first
       if command -v apt &>/dev/null; then
         echo "apt"
       elif command -v yum &>/dev/null; then
@@ -52,8 +60,19 @@ detect_package_manager() {
         echo "dnf"
       elif command -v pacman &>/dev/null; then
         echo "pacman"
+      elif command -v apk &>/dev/null; then
+        echo "apk"
+      elif command -v emerge &>/dev/null; then
+        echo "emerge"
       elif command -v zypper &>/dev/null; then
         echo "zypper"
+      # Check for modern package managers
+      elif command -v snap &>/dev/null; then
+        echo "snap"
+      elif command -v flatpak &>/dev/null; then
+        echo "flatpak"
+      elif command -v nix &>/dev/null; then
+        echo "nix"
       else
         echo "unknown"
       fi
@@ -61,6 +80,8 @@ detect_package_manager() {
     macos)
       if command -v brew &>/dev/null; then
         echo "brew"
+      elif command -v nix &>/dev/null; then
+        echo "nix"
       else
         echo "unknown"
       fi
@@ -70,6 +91,8 @@ detect_package_manager() {
         echo "choco"
       elif command -v winget &>/dev/null; then
         echo "winget"
+      elif command -v scoop &>/dev/null; then
+        echo "scoop"
       else
         echo "unknown"
       fi
@@ -127,6 +150,10 @@ check_dependency() {
         command -v mysql &>/dev/null
       fi
       ;;
+    postgresql)
+      # Check for system PostgreSQL
+      command -v psql &>/dev/null
+      ;;
     php)
       # Check for XAMPP first, then system PHP
       if check_xampp; then
@@ -176,11 +203,36 @@ install_xampp() {
   local platform="$1"
   
   case "$platform" in
-    linux)
+    linux|wsl)
       log "Installing XAMPP for Linux..."
       
-      # Download XAMPP
-      local xampp_url="https://sourceforge.net/projects/xampp/files/XAMPP%20Linux/latest/xampp-linux-x64-latest.run/download"
+      # Detect architecture and choose appropriate XAMPP version
+      local arch=$(detect_architecture)
+      local xampp_url=""
+      
+      case "$arch" in
+        amd64)
+          xampp_url="https://sourceforge.net/projects/xampp/files/XAMPP%20Linux/latest/xampp-linux-x64-latest.run/download"
+          ;;
+        arm64)
+          # XAMPP doesn't have official ARM64 builds, suggest alternative
+          warn "XAMPP doesn't have official ARM64 builds for Linux."
+          warn "Consider using system packages or Docker instead."
+          return 1
+          ;;
+        arm32)
+          # XAMPP doesn't have official ARM32 builds, suggest alternative
+          warn "XAMPP doesn't have official ARM32 builds for Linux."
+          warn "Consider using system packages or Docker instead."
+          return 1
+          ;;
+        *)
+          warn "Unsupported architecture for XAMPP: $arch"
+          warn "Consider using system packages or Docker instead."
+          return 1
+          ;;
+      esac
+      
       local installer="/tmp/xampp-installer.run"
       
       if ! curl -L -o "$installer" "$xampp_url"; then
@@ -206,8 +258,26 @@ install_xampp() {
     macos)
       log "Installing XAMPP for macOS..."
       
-      # Download XAMPP for macOS
-      local xampp_url="https://sourceforge.net/projects/xampp/files/XAMPP%20Mac%20OS%20X/latest/xampp-osx-latest.dmg/download"
+      # Detect architecture and choose appropriate XAMPP version
+      local arch=$(detect_architecture)
+      local xampp_url=""
+      
+      case "$arch" in
+        amd64)
+          xampp_url="https://sourceforge.net/projects/xampp/files/XAMPP%20Mac%20OS%20X/latest/xampp-osx-latest.dmg/download"
+          ;;
+        arm64)
+          # XAMPP doesn't have official ARM64 builds for macOS, suggest alternative
+          warn "XAMPP doesn't have official ARM64 builds for macOS (Apple Silicon)."
+          warn "Consider using Homebrew or Docker instead."
+          return 1
+          ;;
+        *)
+          warn "Unsupported architecture for XAMPP on macOS: $arch"
+          return 1
+          ;;
+      esac
+      
       local dmg_file="/tmp/xampp.dmg"
       
       if ! curl -L -o "$dmg_file" "$xampp_url"; then
@@ -232,8 +302,29 @@ install_xampp() {
     windows)
       log "Installing XAMPP for Windows..."
       
-      # Download XAMPP for Windows
-      local xampp_url="https://sourceforge.net/projects/xampp/files/XAMPP%20Windows/latest/xampp-windows-x64-latest.exe/download"
+      # Detect architecture and choose appropriate XAMPP version
+      local arch=$(detect_architecture)
+      local xampp_url=""
+      
+      case "$arch" in
+        amd64)
+          xampp_url="https://sourceforge.net/projects/xampp/files/XAMPP%20Windows/latest/xampp-windows-x64-latest.exe/download"
+          ;;
+        i386)
+          xampp_url="https://sourceforge.net/projects/xampp/files/XAMPP%20Windows/latest/xampp-windows-x86-latest.exe/download"
+          ;;
+        arm64)
+          # XAMPP doesn't have official ARM64 builds for Windows, suggest alternative
+          warn "XAMPP doesn't have official ARM64 builds for Windows."
+          warn "Consider using system packages or Docker instead."
+          return 1
+          ;;
+        *)
+          warn "Unsupported architecture for XAMPP on Windows: $arch"
+          return 1
+          ;;
+      esac
+      
       local installer="/tmp/xampp-installer.exe"
       
       if ! curl -L -o "$installer" "$xampp_url"; then
@@ -280,6 +371,26 @@ install_apache() {
       sudo systemctl enable httpd
       sudo systemctl start httpd
       ;;
+    apk)
+      sudo apk add --no-cache apache2
+      sudo rc-update add apache2
+      sudo service apache2 start
+      ;;
+    emerge)
+      sudo emerge --ask=n www-servers/apache
+      sudo systemctl enable apache2
+      sudo systemctl start apache2
+      ;;
+    zypper)
+      sudo zypper install -y apache2
+      sudo systemctl enable apache2
+      sudo systemctl start apache2
+      ;;
+    snap)
+      sudo snap install apache2
+      sudo systemctl enable snap.apache2.apache2
+      sudo systemctl start snap.apache2.apache2
+      ;;
     brew)
       brew install httpd
       brew services start httpd
@@ -311,12 +422,84 @@ install_mysql() {
       sudo systemctl enable mysqld
       sudo systemctl start mysqld
       ;;
+    apk)
+      sudo apk add --no-cache mysql mysql-client
+      sudo rc-update add mysql
+      sudo service mysql start
+      ;;
+    emerge)
+      sudo emerge --ask=n dev-db/mysql
+      sudo systemctl enable mysql
+      sudo systemctl start mysql
+      ;;
+    zypper)
+      sudo zypper install -y mysql
+      sudo systemctl enable mysql
+      sudo systemctl start mysql
+      ;;
+    snap)
+      sudo snap install mysql
+      sudo systemctl enable snap.mysql.mysql
+      sudo systemctl start snap.mysql.mysql
+      ;;
     brew)
       brew install mysql
       brew services start mysql
       ;;
     *)
       warn "Cannot install MySQL automatically on this system"
+      return 1
+      ;;
+  esac
+}
+
+install_postgresql() {
+  local pkg_mgr="$1"
+  
+  case "$pkg_mgr" in
+    apt)
+      sudo apt-get update
+      sudo apt-get install -y postgresql postgresql-contrib
+      sudo systemctl enable postgresql
+      sudo systemctl start postgresql
+      ;;
+    yum|dnf)
+      sudo "$pkg_mgr" install -y postgresql-server postgresql-contrib
+      sudo postgresql-setup --initdb
+      sudo systemctl enable postgresql
+      sudo systemctl start postgresql
+      ;;
+    pacman)
+      sudo pacman -S --noconfirm postgresql
+      sudo systemctl enable postgresql
+      sudo systemctl start postgresql
+      ;;
+    apk)
+      sudo apk add --no-cache postgresql postgresql-client
+      sudo rc-update add postgresql
+      sudo service postgresql start
+      ;;
+    emerge)
+      sudo emerge --ask=n dev-db/postgresql
+      sudo systemctl enable postgresql
+      sudo systemctl start postgresql
+      ;;
+    zypper)
+      sudo zypper install -y postgresql postgresql-server
+      sudo systemctl enable postgresql
+      sudo systemctl start postgresql
+      ;;
+    snap)
+      sudo snap install postgresql
+      sudo systemctl enable snap.postgresql.postgresql
+      sudo systemctl start snap.postgresql.postgresql
+      ;;
+    brew)
+      brew install postgresql
+      brew services start postgresql
+      ;;
+    *)
+      warn "Cannot install PostgreSQL automatically on this system"
       return 1
       ;;
   esac
@@ -517,6 +700,7 @@ install_dependency() {
     xampp) install_xampp "$platform" ;;
     apache) install_apache "$pkg_mgr" ;;
     mysql) install_mysql "$pkg_mgr" ;;
+    postgresql) install_postgresql "$pkg_mgr" ;;
     php) install_php "$pkg_mgr" ;;
     composer) install_composer ;;
     node) install_node "$pkg_mgr" ;;

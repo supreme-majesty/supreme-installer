@@ -23,12 +23,50 @@ confirm() {
 # System Detection
 # ----------------------
 detect_platform() {
-  if [[ "$(uname -s)" == "Darwin" ]]; then
+  # Check for WSL first (Windows Subsystem for Linux)
+  if [[ -n "$WSL_DISTRO_NAME" ]] || [[ -n "$WSLENV" ]] || [[ -f /proc/version ]] && grep -qi microsoft /proc/version; then
+    echo "wsl"
+  elif [[ "$(uname -s)" == "Darwin" ]]; then
     echo "macos"
-  elif [[ "$(uname -s)" == *"MINGW"* ]] || [[ "$(uname -s)" == *"CYGWIN"* ]] || [[ "$OSTYPE" == "msys" ]]; then
+  elif [[ "$(uname -s)" == *"MINGW"* ]] || [[ "$(uname -s)" == *"CYGWIN"* ]] || [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
     echo "windows"
   else
     echo "linux"
+  fi
+}
+
+# ----------------------
+# Architecture Detection
+# ----------------------
+detect_architecture() {
+  local arch=$(uname -m)
+  case "$arch" in
+    x86_64|amd64) echo "amd64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    armv7l|armv6l) echo "arm32" ;;
+    ppc64le|powerpc64le) echo "ppc64le" ;;
+    riscv64) echo "riscv64" ;;
+    i386|i686) echo "i386" ;;
+    *) echo "unknown" ;;
+  esac
+}
+
+# ----------------------
+# Service Manager Detection
+# ----------------------
+detect_service_manager() {
+  if command -v systemctl &>/dev/null; then
+    echo "systemctl"
+  elif command -v service &>/dev/null; then
+    echo "service"
+  elif command -v rc-service &>/dev/null; then
+    echo "openrc"
+  elif command -v launchctl &>/dev/null; then
+    echo "launchd"
+  elif command -v upstart-socket-bridge &>/dev/null; then
+    echo "upstart"
+  else
+    echo "unknown"
   fi
 }
 
@@ -55,7 +93,39 @@ is_running() {
 # ----------------------
 check_port() {
   local port="$1"
-  netstat -tuln 2>/dev/null | grep -q ":$port " || ss -tuln 2>/dev/null | grep -q ":$port "
+  local platform=$(detect_platform)
+  
+  case "$platform" in
+    windows|wsl)
+      # Windows and WSL specific port checking
+      if command -v netstat &>/dev/null; then
+        netstat -an 2>/dev/null | grep -q ":$port "
+      elif command -v ss &>/dev/null; then
+        ss -tuln 2>/dev/null | grep -q ":$port "
+      else
+        # Fallback using PowerShell on Windows
+        powershell -Command "Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue" 2>/dev/null | grep -q "LocalPort"
+      fi
+      ;;
+    macos)
+      # macOS specific port checking
+      if command -v lsof &>/dev/null; then
+        lsof -i ":$port" &>/dev/null
+      elif command -v netstat &>/dev/null; then
+        netstat -an 2>/dev/null | grep -q ":$port "
+      else
+        return 1
+      fi
+      ;;
+    linux)
+      # Linux port checking (existing logic)
+      netstat -tuln 2>/dev/null | grep -q ":$port " || ss -tuln 2>/dev/null | grep -q ":$port "
+      ;;
+    *)
+      # Fallback for unknown platforms
+      netstat -tuln 2>/dev/null | grep -q ":$port " || ss -tuln 2>/dev/null | grep -q ":$port "
+      ;;
+  esac
 }
 
 # ----------------------
@@ -73,8 +143,37 @@ validate_project_name() {
 # ----------------------
 # Configuration Management
 # ----------------------
+get_config_path() {
+  local platform=$(detect_platform)
+  local home_dir=""
+  
+  case "$platform" in
+    windows)
+      # Windows: Use USERPROFILE or fallback to HOME
+      home_dir="${USERPROFILE:-$HOME}"
+      if [[ -z "$home_dir" ]]; then
+        home_dir="/c/Users/$(whoami)"
+      fi
+      ;;
+    wsl)
+      # WSL: Use Windows home directory mounted in WSL
+      if [[ -n "$USERPROFILE" ]]; then
+        home_dir="$USERPROFILE"
+      else
+        home_dir="$HOME"
+      fi
+      ;;
+    *)
+      # Linux and macOS: Use standard HOME
+      home_dir="$HOME"
+      ;;
+  esac
+  
+  echo "$home_dir/.supreme/config.env"
+}
+
 load_config() {
-  local config_file="$HOME/.supreme/config.env"
+  local config_file=$(get_config_path)
   if [[ -f "$config_file" ]]; then
     # shellcheck disable=SC1090
     source "$config_file"
@@ -86,7 +185,7 @@ load_config() {
 }
 
 save_config() {
-  local config_file="$HOME/.supreme/config.env"
+  local config_file=$(get_config_path)
   local config_dir="$(dirname "$config_file")"
   
   mkdir -p "$config_dir"

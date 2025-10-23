@@ -1,0 +1,11 @@
+/supreme-dashboard/node_modules
+/supreme-dashboard/dist
+/supreme-dashboard/build
+
+/supreme-dashboard/client/node_modules
+/supreme-dashboard/client/dist
+/supreme-dashboard/client/build
+
+/supreme-dashboard/server/node_modules
+/supreme-dashboard/server/dist
+/supreme-dashboard/server/build

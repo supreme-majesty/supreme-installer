@@ -112,21 +112,27 @@ db_status() {
   
   case "$DB_SERVICE_CMD" in
     *systemctl*)
-      systemctl status mysql || systemctl status mariadb || echo "MySQL/MariaDB service not found"
+      systemctl status mysql || systemctl status mariadb || systemctl status postgresql || echo "Database service not found"
       ;;
     *service*)
-      service mysql status || service mariadb status || echo "MySQL/MariaDB service not found"
+      service mysql status || service mariadb status || service postgresql status || echo "Database service not found"
+      ;;
+    *rc-service*)
+      rc-service status mysql || rc-service status mariadb || rc-service status postgresql || echo "Database service not found"
       ;;
     *lampp*)
       echo "XAMPP MySQL status:"
       $DB_SERVICE_CMD status
       ;;
     *brew*)
-      brew services list | grep mysql || echo "MySQL service not found"
+      brew services list | grep -E "(mysql|postgresql)" || echo "Database service not found"
       ;;
     *net*)
-      echo "Windows MySQL service status:"
-      net start | grep -i mysql || echo "MySQL service not found"
+      echo "Windows database service status:"
+      net start | grep -iE "(mysql|postgresql)" || echo "Database service not found"
+      ;;
+    *launchd*)
+      launchctl list | grep -iE "(mysql|postgresql)" || echo "Database service not found"
       ;;
   esac
 }

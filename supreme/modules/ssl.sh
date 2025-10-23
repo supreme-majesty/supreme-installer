@@ -31,26 +31,42 @@ install_mkcert() {
       sudo mv mkcert.exe /usr/local/bin/mkcert.exe
       sudo chmod +x /usr/local/bin/mkcert.exe
       ;;
-    linux)
+    linux|wsl)
       # Try package managers first
       if command -v apt &>/dev/null; then
         sudo apt-get update -y
         sudo apt-get install -y libnss3-tools curl ca-certificates || true
       elif command -v dnf &>/dev/null; then
         sudo dnf install -y nss-tools curl ca-certificates || true
+      elif command -v apk &>/dev/null; then
+        sudo apk add --no-cache nss-tools curl ca-certificates || true
+      elif command -v pacman &>/dev/null; then
+        sudo pacman -S --noconfirm nss curl ca-certificates || true
       fi
       
-      # Download binary
-      local ARCH
-      ARCH="$(uname -m)"
+      # Download binary using architecture detection
+      local ARCH=$(detect_architecture)
       case "$ARCH" in
-        x86_64)
+        amd64)
           curl -L -o /usr/local/bin/mkcert "https://dl.filippo.io/mkcert/latest?for=linux/amd64"
           ;;
-        aarch64|arm64)
+        arm64)
           curl -L -o /usr/local/bin/mkcert "https://dl.filippo.io/mkcert/latest?for=linux/arm64"
           ;;
+        arm32)
+          curl -L -o /usr/local/bin/mkcert "https://dl.filippo.io/mkcert/latest?for=linux/arm"
+          ;;
+        ppc64le)
+          curl -L -o /usr/local/bin/mkcert "https://dl.filippo.io/mkcert/latest?for=linux/ppc64le"
+          ;;
+        riscv64)
+          curl -L -o /usr/local/bin/mkcert "https://dl.filippo.io/mkcert/latest?for=linux/riscv64"
+          ;;
+        i386)
+          curl -L -o /usr/local/bin/mkcert "https://dl.filippo.io/mkcert/latest?for=linux/386"
+          ;;
         *)
+          warn "Unsupported architecture: $ARCH. Trying amd64 fallback."
           curl -L -o /usr/local/bin/mkcert "https://dl.filippo.io/mkcert/latest?for=linux/amd64"
           ;;
       esac

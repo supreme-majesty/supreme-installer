@@ -14,12 +14,19 @@ const Database = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('browser');
+  const [tableStructure, setTableStructure] = useState(null);
 
   useEffect(() => {
     if (token) {
       fetchDatabases();
     }
   }, [token]);
+
+  useEffect(() => {
+    if (selectedDb && selectedTable && activeTab === 'structure') {
+      getTableStructure(selectedTable);
+    }
+  }, [selectedDb, selectedTable, activeTab]);
 
   const fetchDatabases = async () => {
     try {
@@ -112,9 +119,16 @@ const Database = () => {
         }
       });
       const data = await response.json();
-      return data;
+      if (response.ok) {
+        setTableStructure(data);
+        return data;
+      } else {
+        setError(data.error || 'Failed to fetch table structure');
+        return null;
+      }
     } catch (error) {
       setError('Failed to fetch table structure');
+      console.error('Error fetching table structure:', error);
       return null;
     } finally {
       setLoading(false);
@@ -405,10 +419,81 @@ const Database = () => {
                   <div className="empty-icon">📊</div>
                   <p>Select a database and table to view structure</p>
                 </div>
-              ) : (
+              ) : loading ? (
+                <LoadingSpinner size="small" text="Loading table structure..." />
+              ) : tableStructure ? (
                 <div className="structure-content">
-                  <h4>{selectedTable}</h4>
-                  <p>Structure information will be displayed here</p>
+                  <div className="structure-header">
+                    <h4>{selectedTable}</h4>
+                    <span className="table-info">
+                      {tableStructure.columns?.length || 0} columns, {tableStructure.indexes?.length || 0} indexes
+                    </span>
+                  </div>
+                  
+                  {/* Columns Table */}
+                  <div className="structure-section">
+                    <h5>Columns</h5>
+                    <div className="structure-table">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Nullable</th>
+                            <th>Key</th>
+                            <th>Default</th>
+                            <th>Extra</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tableStructure.columns?.map((column, index) => (
+                            <tr key={index}>
+                              <td><strong>{column.name}</strong></td>
+                              <td>{column.type}</td>
+                              <td>{column.nullable ? 'Yes' : 'No'}</td>
+                              <td>{column.key || '-'}</td>
+                              <td>{column.default || '-'}</td>
+                              <td>{column.extra || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Indexes Table */}
+                  {tableStructure.indexes && tableStructure.indexes.length > 0 && (
+                    <div className="structure-section">
+                      <h5>Indexes</h5>
+                      <div className="structure-table">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Name</th>
+                              <th>Columns</th>
+                              <th>Type</th>
+                              <th>Unique</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tableStructure.indexes.map((index, idx) => (
+                              <tr key={idx}>
+                                <td><strong>{index.name}</strong></td>
+                                <td>{index.columns.join(', ')}</td>
+                                <td>{index.type}</td>
+                                <td>{index.unique ? 'Yes' : 'No'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <div className="empty-icon">⚠️</div>
+                  <p>Failed to load table structure</p>
                 </div>
               )}
             </div>

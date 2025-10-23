@@ -260,6 +260,7 @@ export const executeCustomQuery = async (databaseName, query) => {
 // Get table structure
 export const getTableStructure = async (databaseName, tableName) => {
   try {
+    console.log(`🔍 Getting table structure for ${databaseName}.${tableName}...`);
     let columns, indexes;
     
     if (dbType === 'postgresql') {
@@ -302,12 +303,17 @@ export const getTableStructure = async (databaseName, tableName) => {
       
       await tempPool.end();
     } else {
+      // For MySQL, create a temporary connection to the specific database
+      const tempConfig = { ...dbConfig };
+      tempConfig.database = databaseName;
+      const tempPool = mysql.createPool(tempConfig);
+      
       const query = `
         SELECT 
           COLUMN_NAME as name,
           DATA_TYPE as type,
           IS_NULLABLE as nullable,
-          COLUMN_KEY as key,
+          COLUMN_KEY as \`key\`,
           COLUMN_DEFAULT as default_value,
           EXTRA as extra,
           CHARACTER_MAXIMUM_LENGTH as max_length
@@ -316,7 +322,10 @@ export const getTableStructure = async (databaseName, tableName) => {
         ORDER BY ORDINAL_POSITION
       `;
       
-      columns = await executeQuery(query, [databaseName, tableName]);
+      console.log(`📝 Executing column query for table: ${tableName}`);
+      const [columnRows] = await tempPool.execute(query, [databaseName, tableName]);
+      columns = columnRows;
+      console.log(`📊 Found ${columns.length} columns`);
       
       // Get indexes
       const indexQuery = `
@@ -331,10 +340,15 @@ export const getTableStructure = async (databaseName, tableName) => {
         ORDER BY INDEX_NAME
       `;
       
-      indexes = await executeQuery(indexQuery, [databaseName, tableName]);
+      console.log(`📝 Executing index query for table: ${tableName}`);
+      const [indexRows] = await tempPool.execute(indexQuery, [databaseName, tableName]);
+      indexes = indexRows;
+      console.log(`📊 Found ${indexes.length} indexes`);
+      
+      await tempPool.end();
     }
     
-    return {
+    const result = {
       columns: columns.map(col => ({
         name: col.name,
         type: col.max_length ? `${col.type}(${col.max_length})` : col.type,
@@ -350,8 +364,14 @@ export const getTableStructure = async (databaseName, tableName) => {
         unique: dbType === 'postgresql' ? idx.definition?.includes('UNIQUE') : !idx.non_unique
       }))
     };
+    
+    console.log(`✅ Successfully retrieved table structure: ${result.columns.length} columns, ${result.indexes.length} indexes`);
+    return result;
   } catch (error) {
-    console.error('Error fetching table structure:', error);
+    console.error('❌ Error in getTableStructure:', error.message);
+    console.error('Database type:', dbType);
+    console.error('Database name:', databaseName);
+    console.error('Table name:', tableName);
     throw error;
   }
 };

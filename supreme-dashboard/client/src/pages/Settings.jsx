@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import './Settings.css';
 
 const Settings = () => {
@@ -44,6 +45,7 @@ const Settings = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [activeTab, setActiveTab] = useState('general');
+  const { token } = useAuth();
 
   useEffect(() => {
     // Load settings from localStorage or API
@@ -53,7 +55,102 @@ const Settings = () => {
   const loadSettings = () => {
     const savedSettings = localStorage.getItem('supreme-dashboard-settings');
     if (savedSettings) {
-      setSettings(JSON.parse(savedSettings));
+      try {
+        const parsedSettings = JSON.parse(savedSettings);
+        // Ensure all required sections exist
+        const defaultSettings = {
+          general: {
+            theme: 'dark',
+            language: 'en',
+            timezone: 'UTC',
+            notifications: true,
+            autoSave: true
+          },
+          supreme: {
+            tld: 'test',
+            webroot: '/var/www/html',
+            defaultProtocol: 'https',
+            enableDatabase: true,
+            apacheRestartCmd: 'sudo systemctl restart apache2',
+            certDir: '/etc/ssl/certs',
+            vhostsPath: '/etc/apache2/sites-available'
+          },
+          development: {
+            hotReload: true,
+            debugMode: false,
+            logLevel: 'info',
+            port: 5000,
+            host: 'localhost'
+          },
+          security: {
+            enableHttps: true,
+            enableCors: true,
+            sessionTimeout: 30,
+            maxLoginAttempts: 5
+          },
+          database: {
+            enabled: true,
+            host: 'localhost',
+            port: 3306,
+            name: 'supreme_dev',
+            username: 'root',
+            password: ''
+          }
+        };
+        
+        setSettings({
+          ...defaultSettings,
+          ...parsedSettings,
+          // Ensure each section has all required properties
+          general: { ...defaultSettings.general, ...parsedSettings.general },
+          supreme: { ...defaultSettings.supreme, ...parsedSettings.supreme },
+          development: { ...defaultSettings.development, ...parsedSettings.development },
+          security: { ...defaultSettings.security, ...parsedSettings.security },
+          database: { ...defaultSettings.database, ...parsedSettings.database }
+        });
+      } catch (error) {
+        console.error('Error parsing saved settings:', error);
+        // If parsing fails, use default settings
+        setSettings({
+          general: {
+            theme: 'dark',
+            language: 'en',
+            timezone: 'UTC',
+            notifications: true,
+            autoSave: true
+          },
+          supreme: {
+            tld: 'test',
+            webroot: '/var/www/html',
+            defaultProtocol: 'https',
+            enableDatabase: true,
+            apacheRestartCmd: 'sudo systemctl restart apache2',
+            certDir: '/etc/ssl/certs',
+            vhostsPath: '/etc/apache2/sites-available'
+          },
+          development: {
+            hotReload: true,
+            debugMode: false,
+            logLevel: 'info',
+            port: 5000,
+            host: 'localhost'
+          },
+          security: {
+            enableHttps: true,
+            enableCors: true,
+            sessionTimeout: 30,
+            maxLoginAttempts: 5
+          },
+          database: {
+            enabled: true,
+            host: 'localhost',
+            port: 3306,
+            name: 'supreme_dev',
+            username: 'root',
+            password: ''
+          }
+        });
+      }
     }
   };
 
@@ -80,6 +177,7 @@ const Settings = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(settings),
       });
@@ -107,6 +205,15 @@ const Settings = () => {
           timezone: 'UTC',
           notifications: true,
           autoSave: true
+        },
+        supreme: {
+          tld: 'test',
+          webroot: '/var/www/html',
+          defaultProtocol: 'https',
+          enableDatabase: true,
+          apacheRestartCmd: 'sudo systemctl restart apache2',
+          certDir: '/etc/ssl/certs',
+          vhostsPath: '/etc/apache2/sites-available'
         },
         development: {
           hotReload: true,
@@ -264,7 +371,7 @@ const Settings = () => {
                     <input
                       type="text"
                       className="form-input"
-                      value={settings.supreme.tld}
+                      value={settings.supreme?.tld || 'test'}
                       onChange={(e) => handleInputChange('supreme', 'tld', e.target.value)}
                       placeholder="test"
                     />
@@ -276,7 +383,7 @@ const Settings = () => {
                     <input
                       type="text"
                       className="form-input"
-                      value={settings.supreme.webroot}
+                      value={settings.supreme?.webroot || '/var/www/html'}
                       onChange={(e) => handleInputChange('supreme', 'webroot', e.target.value)}
                       placeholder="/var/www/html"
                     />
@@ -287,7 +394,7 @@ const Settings = () => {
                     <label className="form-label">Default Protocol</label>
                     <select
                       className="form-input"
-                      value={settings.supreme.defaultProtocol}
+                      value={settings.supreme?.defaultProtocol || 'https'}
                       onChange={(e) => handleInputChange('supreme', 'defaultProtocol', e.target.value)}
                     >
                       <option value="http">HTTP</option>
@@ -301,7 +408,7 @@ const Settings = () => {
                     <input
                       type="text"
                       className="form-input"
-                      value={settings.supreme.apacheRestartCmd}
+                      value={settings.supreme?.apacheRestartCmd || 'sudo systemctl restart apache2'}
                       onChange={(e) => handleInputChange('supreme', 'apacheRestartCmd', e.target.value)}
                       placeholder="sudo systemctl restart apache2"
                     />
@@ -313,7 +420,7 @@ const Settings = () => {
                     <input
                       type="text"
                       className="form-input"
-                      value={settings.supreme.certDir}
+                      value={settings.supreme?.certDir || '/etc/ssl/certs'}
                       onChange={(e) => handleInputChange('supreme', 'certDir', e.target.value)}
                       placeholder="/etc/ssl/certs"
                     />
@@ -325,7 +432,7 @@ const Settings = () => {
                     <input
                       type="text"
                       className="form-input"
-                      value={settings.supreme.vhostsPath}
+                      value={settings.supreme?.vhostsPath || '/etc/apache2/sites-available'}
                       onChange={(e) => handleInputChange('supreme', 'vhostsPath', e.target.value)}
                       placeholder="/etc/apache2/sites-available"
                     />
@@ -338,7 +445,7 @@ const Settings = () => {
                       <input
                         type="checkbox"
                         id="supremeDbEnabled"
-                        checked={settings.supreme.enableDatabase}
+                        checked={settings.supreme?.enableDatabase || true}
                         onChange={(e) => handleInputChange('supreme', 'enableDatabase', e.target.checked)}
                       />
                       <label htmlFor="supremeDbEnabled">Enable database management features</label>

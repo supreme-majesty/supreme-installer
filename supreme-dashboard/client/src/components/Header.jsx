@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import './Header.css';
 
 const Header = ({ onMenuClick, systemInfo }) => {
+  const { user, logout } = useAuth();
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const formatUptime = (seconds) => {
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
@@ -44,13 +47,32 @@ const Header = ({ onMenuClick, systemInfo }) => {
           </div>
         )}
         
-        <div className="user-avatar">
+        <div className="user-avatar" onClick={() => setShowUserMenu(!showUserMenu)}>
           <div className="avatar-icon">👤</div>
           <div className="user-info">
-            <span className="user-name">Admin</span>
-            <span className="user-role">System Administrator</span>
+            <span className="user-name">{user?.username || 'User'}</span>
+            <span className="user-role">{user?.role || 'Developer'}</span>
           </div>
+          <div className="dropdown-arrow">▼</div>
         </div>
+        
+        {showUserMenu && (
+          <div className="user-menu">
+            <div className="user-menu-item">
+              <span className="menu-icon">👤</span>
+              <span>Profile</span>
+            </div>
+            <div className="user-menu-item">
+              <span className="menu-icon">⚙️</span>
+              <span>Settings</span>
+            </div>
+            <div className="user-menu-divider"></div>
+            <div className="user-menu-item" onClick={logout}>
+              <span className="menu-icon">🚪</span>
+              <span>Logout</span>
+            </div>
+          </div>
+        )}
       </div>
     </header>
   );

@@ -1,27 +1,37 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import './SystemInfo.css';
 
 const SystemInfo = () => {
   const [systemInfo, setSystemInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { token } = useAuth();
 
   useEffect(() => {
-    fetchSystemInfo();
-    // Refresh system info every 30 seconds
-    const interval = setInterval(fetchSystemInfo, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    if (token) {
+      fetchSystemInfo();
+      // Refresh system info every 30 seconds
+      const interval = setInterval(fetchSystemInfo, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [token]);
 
   const fetchSystemInfo = async () => {
     try {
-      const response = await fetch('/api/system');
-      if (!response.ok) {
+      const response = await fetch('/api/system', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSystemInfo(data);
+        setError(null);
+      } else {
         throw new Error('Failed to fetch system information');
       }
-      const data = await response.json();
-      setSystemInfo(data);
-      setError(null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -203,7 +213,7 @@ const SystemInfo = () => {
           <div className="info-table">
             <div className="info-row">
               <span className="info-label">Process ID:</span>
-              <span className="info-value">{process.pid || 'N/A'}</span>
+              <span className="info-value">N/A</span>
             </div>
             <div className="info-row">
               <span className="info-label">Platform:</span>

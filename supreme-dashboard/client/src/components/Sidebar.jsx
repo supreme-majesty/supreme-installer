@@ -43,6 +43,24 @@ const Sidebar = ({ isOpen, onToggle }) => {
       description: 'Installed modules and plugins'
     },
     {
+      path: '/database',
+      icon: '🗄️',
+      label: 'Database',
+      description: 'Database management and queries'
+    },
+    {
+      path: '/files',
+      icon: '📁',
+      label: 'File Manager',
+      description: 'Browse and edit project files'
+    },
+    {
+      path: '/terminal',
+      icon: '💻',
+      label: 'Terminal',
+      description: 'Execute commands and manage environment'
+    },
+    {
       path: '/settings',
       icon: '⚙️',
       label: 'Settings',

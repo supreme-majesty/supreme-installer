@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import './Logs.css';
 
 const Logs = () => {
@@ -11,10 +12,13 @@ const Logs = () => {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [filter, setFilter] = useState('');
   const logsEndRef = useRef(null);
+  const { token } = useAuth();
 
   useEffect(() => {
-    fetchProjects();
-  }, []);
+    if (token) {
+      fetchProjects();
+    }
+  }, [token]);
 
   useEffect(() => {
     if (autoRefresh) {
@@ -24,8 +28,10 @@ const Logs = () => {
   }, [autoRefresh, selectedProject, lines]);
 
   useEffect(() => {
-    fetchLogs();
-  }, [selectedProject, lines]);
+    if (token) {
+      fetchLogs();
+    }
+  }, [selectedProject, lines, token]);
 
   useEffect(() => {
     scrollToBottom();
@@ -33,9 +39,18 @@ const Logs = () => {
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch('/api/projects');
-      const data = await response.json();
-      setProjects(data.projects || []);
+      const response = await fetch('/api/projects', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setProjects(data.projects || []);
+      } else {
+        console.error('Error fetching projects:', response.status);
+      }
     } catch (error) {
       console.error('Error fetching projects:', error);
     }
@@ -50,13 +65,18 @@ const Logs = () => {
       if (selectedProject) params.append('project', selectedProject);
       params.append('lines', lines.toString());
       
-      const response = await fetch(`/api/logs?${params}`);
-      const data = await response.json();
+      const response = await fetch(`/api/logs?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       
       if (response.ok) {
+        const data = await response.json();
         setLogs(data.logs || []);
       } else {
-        setError(data.error || 'Failed to fetch logs');
+        setError('Failed to fetch logs');
+        console.error('Error fetching logs:', response.status);
       }
     } catch (error) {
       setError('Failed to fetch logs');

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import './Projects.css';
 
 const Projects = () => {
@@ -7,16 +8,29 @@ const Projects = () => {
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all'); // all, active, inactive
   const [sortBy, setSortBy] = useState('name'); // name, type, status, modified
+  const { token } = useAuth();
 
   useEffect(() => {
-    fetchProjects();
-  }, []);
+    if (token) {
+      fetchProjects();
+    }
+  }, [token]);
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch('/api/projects');
-      const data = await response.json();
-      setProjects(data.projects || []);
+      const response = await fetch('/api/projects', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setProjects(data.projects || []);
+      } else {
+        setError('Failed to fetch projects');
+        console.error('Error fetching projects:', response.status);
+      }
     } catch (error) {
       setError('Failed to fetch projects');
       console.error('Error fetching projects:', error);
@@ -28,7 +42,10 @@ const Projects = () => {
   const handleProjectAction = async (projectName, action) => {
     try {
       const response = await fetch(`/api/projects/${projectName}/${action}`, {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       const result = await response.json();
       

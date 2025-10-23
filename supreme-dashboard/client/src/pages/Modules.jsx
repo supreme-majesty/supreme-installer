@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import './Modules.css';
 
 const Modules = () => {
@@ -6,20 +7,29 @@ const Modules = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
+  const { token } = useAuth();
 
   useEffect(() => {
-    fetchModules();
-  }, []);
+    if (token) {
+      fetchModules();
+    }
+  }, [token]);
 
   const fetchModules = async () => {
     try {
-      const response = await fetch('/api/modules');
-      if (!response.ok) {
+      const response = await fetch('/api/modules', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setModules(data);
+        setError(null);
+      } else {
         throw new Error('Failed to fetch modules');
       }
-      const data = await response.json();
-      setModules(data);
-      setError(null);
     } catch (err) {
       setError(err.message);
     } finally {

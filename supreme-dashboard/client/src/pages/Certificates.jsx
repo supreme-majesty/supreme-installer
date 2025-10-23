@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import './Certificates.css';
 
 const Certificates = () => {
@@ -6,16 +7,29 @@ const Certificates = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const { token } = useAuth();
 
   useEffect(() => {
-    fetchSslStatus();
-  }, []);
+    if (token) {
+      fetchSslStatus();
+    }
+  }, [token]);
 
   const fetchSslStatus = async () => {
     try {
-      const response = await fetch('/api/ssl/status');
-      const data = await response.json();
-      setSslStatus(data);
+      const response = await fetch('/api/ssl/status', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSslStatus(data);
+      } else {
+        setError('Failed to fetch SSL status');
+        console.error('Error fetching SSL status:', response.status);
+      }
     } catch (error) {
       setError('Failed to fetch SSL status');
       console.error('Error fetching SSL status:', error);
@@ -28,7 +42,10 @@ const Certificates = () => {
     setActionLoading(true);
     try {
       const response = await fetch(`/api/ssl/${action}`, {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       const result = await response.json();
       
@@ -46,16 +63,23 @@ const Certificates = () => {
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    if (!dateString) return 'N/A';
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid Date';
+    }
   };
 
   const getDaysUntilExpiry = (days) => {
+    if (days === null || days === undefined) return { text: 'Unknown', class: 'unknown' };
     if (days < 0) return { text: 'Expired', class: 'expired' };
     if (days < 30) return { text: `${days} days`, class: 'warning' };
     if (days < 90) return { text: `${days} days`, class: 'caution' };
@@ -127,7 +151,7 @@ const Certificates = () => {
           </div>
         </div>
 
-        {sslStatus?.certificate && (
+        {sslStatus?.certificate && sslStatus.certificate !== null && (
           <div className="certificate-info-card">
             <div className="cert-header">
               <h3>Wildcard Certificate</h3>
@@ -186,7 +210,7 @@ const Certificates = () => {
       </div>
 
       {/* Certificate Information */}
-      {sslStatus?.certificate && (
+      {sslStatus?.certificate && sslStatus.certificate !== null && (
         <div className="certificate-details">
           <h3>Certificate Details</h3>
           

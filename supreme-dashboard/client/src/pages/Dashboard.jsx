@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
+import { useAuth } from '../contexts/AuthContext';
 import './Dashboard.css';
 
 // Register Chart.js components
@@ -18,16 +19,28 @@ ChartJS.register(
 const Dashboard = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { token } = useAuth();
 
   useEffect(() => {
-    fetchDashboardStats();
-  }, []);
+    if (token) {
+      fetchDashboardStats();
+    }
+  }, [token]);
 
   const fetchDashboardStats = async () => {
     try {
-      const response = await fetch('/api/stats');
-      const data = await response.json();
-      setStats(data);
+      const response = await fetch('/api/stats', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
+      } else {
+        console.error('Failed to fetch dashboard stats:', response.status);
+      }
     } catch (error) {
       console.error('Failed to fetch dashboard stats:', error);
     } finally {

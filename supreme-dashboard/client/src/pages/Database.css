@@ -83,6 +83,12 @@
   margin: 0;
 }
 
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
 .database-list, .table-list {
   display: flex;
   flex-direction: column;

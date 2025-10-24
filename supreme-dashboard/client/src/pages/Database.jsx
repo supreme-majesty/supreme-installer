@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import InputModal from '../components/InputModal';
 import ConfirmModal from '../components/ConfirmModal';
+import TableCreationModal from '../components/TableCreationModal';
 import './Database.css';
 
 const Database = () => {
@@ -19,11 +20,14 @@ const Database = () => {
   const [tableStructure, setTableStructure] = useState(null);
   const [showCreateDbModal, setShowCreateDbModal] = useState(false);
   const [showDeleteDbModal, setShowDeleteDbModal] = useState(false);
+  const [showCreateTableModal, setShowCreateTableModal] = useState(false);
   const [dbToDelete, setDbToDelete] = useState(null);
+  const [tableTemplates, setTableTemplates] = useState({});
 
   useEffect(() => {
     if (token) {
       fetchDatabases();
+      fetchTableTemplates();
     }
   }, [token]);
 
@@ -211,6 +215,59 @@ const Database = () => {
     }
   };
 
+  const fetchTableTemplates = async () => {
+    try {
+      const response = await fetch('/api/database/table/templates', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setTableTemplates(data.templates || {});
+      }
+    } catch (error) {
+      console.error('Error fetching table templates:', error);
+    }
+  };
+
+  const createTable = async (tableData) => {
+    try {
+      setLoading(true);
+      setError(null);
+      console.log('Creating table with data:', tableData);
+      
+      const response = await fetch('/api/database/table/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(tableData)
+      });
+
+      console.log('Response status:', response.status);
+      const data = await response.json();
+      console.log('Response data:', data);
+
+      if (response.ok) {
+        await fetchTables(selectedDb);
+        return { success: true };
+      } else {
+        const errorMessage = data.error || 'Failed to create table';
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
+      }
+    } catch (error) {
+      console.error('Table creation network error:', error);
+      const errorMessage = 'Network error: Failed to create table';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const tabs = [
     { id: 'browser', label: 'Database Browser', icon: '🗂️' },
     { id: 'query', label: 'SQL Query', icon: '💻' },
@@ -311,9 +368,24 @@ const Database = () => {
                 <div className="dashboard-card">
                   <div className="section-header">
                     <h3>Tables</h3>
-                    {selectedDb && (
-                      <span className="database-name">{selectedDb}</span>
-                    )}
+                    <div className="section-actions">
+                      {selectedDb && (
+                        <span className="database-name">{selectedDb}</span>
+                      )}
+                      {selectedDb ? (
+                        <button 
+                          className="btn btn-primary btn-sm"
+                          onClick={() => setShowCreateTableModal(true)}
+                          title={`Create new table in ${selectedDb}`}
+                        >
+                          + New Table
+                        </button>
+                      ) : (
+                        <span className="text-muted" style={{fontSize: '0.8rem', color: '#6b7280'}}>
+                          Select a database to create tables
+                        </span>
+                      )}
+                    </div>
                   </div>
                   
                   <div className="table-list">
@@ -539,6 +611,15 @@ const Database = () => {
         confirmText="Delete"
         cancelText="Cancel"
         type="danger"
+      />
+
+      {/* Table Creation Modal */}
+      <TableCreationModal
+        isOpen={showCreateTableModal}
+        onClose={() => setShowCreateTableModal(false)}
+        onSubmit={createTable}
+        database={selectedDb}
+        templates={tableTemplates}
       />
     </div>
   );

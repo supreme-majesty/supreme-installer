@@ -6,13 +6,15 @@
   "main": "server/index.js",
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
-    "server:dev": "cd server && npm run dev",
+    "dev:stable": "./start-dev.sh",
+    "server:dev": "cd server && PORT=3001 npm run dev",
     "client:dev": "cd client && npm run dev",
     "build": "npm run client:build && npm run server:build",
     "client:build": "cd client && npm run build",
     "server:build": "cd server && npm run build",
-    "start": "cd server && npm start",
-    "install:all": "npm install && cd client && npm install && cd ../server && npm install"
+    "start": "cd server && PORT=3001 npm start",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+    "clean": "pkill -f 'node.*index.js' || true && pkill -f 'npm run dev' || true && pkill -f 'vite' || true"
   },
   "keywords": ["supreme", "dashboard", "development", "environment", "glassmorphic", "fastify", "react"],
   "author": "Supreme Development Environment",

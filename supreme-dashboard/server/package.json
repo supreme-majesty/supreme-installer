@@ -5,9 +5,9 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "node --watch index.js",
+    "dev": "NODE_ENV=development node --watch index.js",
     "build": "echo 'Server build complete'",
-    "start": "node index.js",
+    "start": "NODE_ENV=production node index.js",
     "test": "jest --testPathPattern=tests --verbose",
     "test:watch": "jest --testPathPattern=tests --watch",
     "test:coverage": "jest --testPathPattern=tests --coverage",

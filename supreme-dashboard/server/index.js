@@ -18,6 +18,9 @@ import {
   getTableStructure, 
   createDatabase, 
   deleteDatabase, 
+  createTable,
+  deleteTable,
+  getTableTemplates,
   testConnection 
 } from './middleware/database.js';
 
@@ -952,6 +955,86 @@ fastify.delete('/api/database/delete/:name', { preHandler: [authenticateToken, r
   } catch (error) {
     console.error('Error deleting database:', error);
     return reply.code(500).send({ error: 'Failed to delete database' });
+  }
+});
+
+// Table creation endpoint
+fastify.post('/api/database/table/create', { preHandler: [authenticateToken, requireRole(['admin'])] }, async (request, reply) => {
+  try {
+    const { database, name, schema } = request.body;
+    
+    if (!database || !name || !schema) {
+      return reply.code(400).send({ error: 'Database name, table name, and schema are required' });
+    }
+    
+    // Enhanced validation for table names
+    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(name)) {
+      return reply.code(400).send({ 
+        error: 'Invalid table name. Must start with a letter and contain only letters, numbers, and underscores (max 64 characters)' 
+      });
+    }
+    
+    // Check for reserved table names
+    const reservedNames = ['information_schema', 'performance_schema', 'mysql', 'sys'];
+    if (reservedNames.includes(name.toLowerCase())) {
+      return reply.code(400).send({ error: 'Table name is reserved' });
+    }
+    
+    if (!dbInitialized) {
+      return {
+        success: true,
+        message: `Table '${name}' created successfully in database '${database}' (mock)`,
+        mock: true
+      };
+    }
+    
+    const result = await createTable(database, name, schema);
+    return { ...result, mock: false };
+  } catch (error) {
+    console.error('Error creating table:', error);
+    return reply.code(500).send({ error: 'Failed to create table' });
+  }
+});
+
+// Table deletion endpoint
+fastify.delete('/api/database/table/delete/:database/:name', { preHandler: [authenticateToken, requireRole(['admin'])] }, async (request, reply) => {
+  try {
+    const { database, name } = request.params;
+    
+    if (!database || !name) {
+      return reply.code(400).send({ error: 'Database name and table name are required' });
+    }
+    
+    // Check for reserved table names
+    const reservedNames = ['information_schema', 'performance_schema', 'mysql', 'sys'];
+    if (reservedNames.includes(name.toLowerCase())) {
+      return reply.code(400).send({ error: 'Cannot delete reserved table' });
+    }
+    
+    if (!dbInitialized) {
+      return {
+        success: true,
+        message: `Table '${name}' deleted successfully from database '${database}' (mock)`,
+        mock: true
+      };
+    }
+    
+    const result = await deleteTable(database, name);
+    return { ...result, mock: false };
+  } catch (error) {
+    console.error('Error deleting table:', error);
+    return reply.code(500).send({ error: 'Failed to delete table' });
+  }
+});
+
+// Get table templates endpoint
+fastify.get('/api/database/table/templates', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const templates = getTableTemplates();
+    return { templates };
+  } catch (error) {
+    console.error('Error getting table templates:', error);
+    return reply.code(500).send({ error: 'Failed to get table templates' });
   }
 });
 

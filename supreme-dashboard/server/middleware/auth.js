@@ -132,7 +132,7 @@ export const authenticateToken = async (request, reply) => {
     }
 
     // Check if user has permission for this endpoint
-    const endpoint = request.routerPath || request.url;
+    const endpoint = request.routeOptions?.url || request.url;
     if (!hasPermission(user, endpoint, request.method)) {
       return reply.code(403).send({ 
         error: 'Insufficient permissions for this endpoint',

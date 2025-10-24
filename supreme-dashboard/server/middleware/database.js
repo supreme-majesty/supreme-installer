@@ -46,10 +46,7 @@ const loadDatabaseConfig = () => {
           database: 'mysql', // Use mysql database instead of information_schema
           waitForConnections: true,
           connectionLimit: 10,
-          queueLimit: 0,
-          acquireTimeout: 60000,
-          timeout: 60000,
-          reconnect: true
+          queueLimit: 0
         };
       }
       
@@ -408,6 +405,131 @@ export const deleteDatabase = async (databaseName) => {
     console.error('Error deleting database:', error);
     throw error;
   }
+};
+
+// Create table
+export const createTable = async (databaseName, tableName, tableSchema) => {
+  try {
+    let query;
+    if (dbType === 'postgresql') {
+      query = `CREATE TABLE "${tableName}" (${tableSchema})`;
+    } else {
+      query = `CREATE TABLE IF NOT EXISTS \`${tableName}\` (${tableSchema})`;
+    }
+    
+    // Switch to the specific database for table creation
+    const originalConfig = { ...dbConfig };
+    if (dbType === 'postgresql') {
+      dbConfig.database = databaseName;
+    } else {
+      dbConfig.database = databaseName;
+    }
+    
+    // Reinitialize connection with the specific database
+    if (dbType === 'postgresql') {
+      connectionPool = new Pool(dbConfig);
+    } else {
+      connectionPool = mysql.createPool(dbConfig);
+    }
+    
+    await executeQuery(query);
+    
+    // Restore original config
+    Object.assign(dbConfig, originalConfig);
+    if (dbType === 'postgresql') {
+      connectionPool = new Pool(dbConfig);
+    } else {
+      connectionPool = mysql.createPool(dbConfig);
+    }
+    
+    return { success: true, message: `Table '${tableName}' created successfully in database '${databaseName}'` };
+  } catch (error) {
+    console.error('Error creating table:', error);
+    throw error;
+  }
+};
+
+// Delete table
+export const deleteTable = async (databaseName, tableName) => {
+  try {
+    let query;
+    if (dbType === 'postgresql') {
+      query = `DROP TABLE IF EXISTS "${tableName}"`;
+    } else {
+      query = `DROP TABLE IF EXISTS \`${tableName}\``;
+    }
+    
+    // Switch to the specific database for table deletion
+    const originalConfig = { ...dbConfig };
+    if (dbType === 'postgresql') {
+      dbConfig.database = databaseName;
+    } else {
+      dbConfig.database = databaseName;
+    }
+    
+    // Reinitialize connection with the specific database
+    if (dbType === 'postgresql') {
+      connectionPool = new Pool(dbConfig);
+    } else {
+      connectionPool = mysql.createPool(dbConfig);
+    }
+    
+    await executeQuery(query);
+    
+    // Restore original config
+    Object.assign(dbConfig, originalConfig);
+    if (dbType === 'postgresql') {
+      connectionPool = new Pool(dbConfig);
+    } else {
+      connectionPool = mysql.createPool(dbConfig);
+    }
+    
+    return { success: true, message: `Table '${tableName}' deleted successfully from database '${databaseName}'` };
+  } catch (error) {
+    console.error('Error deleting table:', error);
+    throw error;
+  }
+};
+
+// Get table templates
+export const getTableTemplates = () => {
+  return {
+    users: {
+      name: 'Users',
+      description: 'Basic user table with authentication fields',
+      schema: dbType === 'postgresql' 
+        ? 'id SERIAL PRIMARY KEY, username VARCHAR(50) UNIQUE NOT NULL, email VARCHAR(100) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, first_name VARCHAR(50), last_name VARCHAR(50), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
+        : 'id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(50) UNIQUE NOT NULL, email VARCHAR(100) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, first_name VARCHAR(50), last_name VARCHAR(50), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
+    },
+    posts: {
+      name: 'Posts',
+      description: 'Blog posts table with content and metadata',
+      schema: dbType === 'postgresql'
+        ? 'id SERIAL PRIMARY KEY, title VARCHAR(255) NOT NULL, content TEXT, slug VARCHAR(255) UNIQUE, author_id INTEGER, status VARCHAR(20) DEFAULT \'draft\', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
+        : 'id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255) NOT NULL, content TEXT, slug VARCHAR(255) UNIQUE, author_id INT, status VARCHAR(20) DEFAULT \'draft\', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
+    },
+    products: {
+      name: 'Products',
+      description: 'E-commerce products table',
+      schema: dbType === 'postgresql'
+        ? 'id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, price DECIMAL(10,2) NOT NULL, sku VARCHAR(100) UNIQUE, category_id INTEGER, stock_quantity INTEGER DEFAULT 0, is_active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
+        : 'id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, description TEXT, price DECIMAL(10,2) NOT NULL, sku VARCHAR(100) UNIQUE, category_id INT, stock_quantity INT DEFAULT 0, is_active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
+    },
+    orders: {
+      name: 'Orders',
+      description: 'Order management table',
+      schema: dbType === 'postgresql'
+        ? 'id SERIAL PRIMARY KEY, order_number VARCHAR(50) UNIQUE NOT NULL, customer_id INTEGER, total_amount DECIMAL(10,2) NOT NULL, status VARCHAR(20) DEFAULT \'pending\', shipping_address TEXT, billing_address TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
+        : 'id INT AUTO_INCREMENT PRIMARY KEY, order_number VARCHAR(50) UNIQUE NOT NULL, customer_id INT, total_amount DECIMAL(10,2) NOT NULL, status VARCHAR(20) DEFAULT \'pending\', shipping_address TEXT, billing_address TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
+    },
+    categories: {
+      name: 'Categories',
+      description: 'Category classification table',
+      schema: dbType === 'postgresql'
+        ? 'id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, slug VARCHAR(100) UNIQUE, description TEXT, parent_id INTEGER, sort_order INTEGER DEFAULT 0, is_active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
+        : 'id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL, slug VARCHAR(100) UNIQUE, description TEXT, parent_id INT, sort_order INT DEFAULT 0, is_active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
+    }
+  };
 };
 
 // Test database connection

@@ -62,16 +62,17 @@ const TableCreationModal = ({ isOpen, onClose, onSubmit, database, templates }) 
     }
     
     if (!useTemplate && fields.length > 0) {
-      return fields.map(field => {
+      const schema = fields.map(field => {
+        console.log('Processing field:', field);
         let definition = `${field.name} ${field.type}`;
         
         // Add type parameters if they exist
-        if (field.typeParams && fieldTypes.find(t => t.value === field.type)?.needsParams) {
+        if (field.typeParams && field.typeParams.trim()) {
           definition += `(${field.typeParams})`;
         }
         
-        if (field.autoIncrement) {
-          definition = field.type === 'INT' ? 'INT AUTO_INCREMENT' : definition;
+        if (field.autoIncrement && field.type === 'INT') {
+          definition = definition.replace('INT', 'INT AUTO_INCREMENT');
         }
         
         if (field.primaryKey) {
@@ -90,8 +91,12 @@ const TableCreationModal = ({ isOpen, onClose, onSubmit, database, templates }) 
           definition += ` DEFAULT '${field.defaultValue}'`;
         }
         
+        console.log('Generated definition:', definition);
         return definition;
       }).join(', ');
+      
+      console.log('Final schema:', schema);
+      return schema;
     }
     
     return customSchema;
@@ -121,6 +126,7 @@ const TableCreationModal = ({ isOpen, onClose, onSubmit, database, templates }) 
     try {
       const schema = generateSchema();
       console.log('Creating table with data:', { database, name: tableName, schema });
+      console.log('Fields data:', fields);
       const result = await onSubmit({
         database,
         name: tableName,

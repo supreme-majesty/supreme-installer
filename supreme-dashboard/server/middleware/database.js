@@ -410,6 +410,14 @@ export const deleteDatabase = async (databaseName) => {
 // Create table
 export const createTable = async (databaseName, tableName, tableSchema) => {
   try {
+    console.log('createTable called with:', { databaseName, tableName, tableSchema });
+    console.log('dbType:', dbType);
+    console.log('dbConfig:', dbConfig);
+    
+    if (!dbType || !dbConfig) {
+      throw new Error('Database not properly initialized');
+    }
+    
     let query;
     if (dbType === 'postgresql') {
       query = `CREATE TABLE "${tableName}" (${tableSchema})`;
@@ -417,34 +425,36 @@ export const createTable = async (databaseName, tableName, tableSchema) => {
       query = `CREATE TABLE IF NOT EXISTS \`${tableName}\` (${tableSchema})`;
     }
     
-    // Switch to the specific database for table creation
-    const originalConfig = { ...dbConfig };
+    // Create a temporary connection to the specific database
     if (dbType === 'postgresql') {
-      dbConfig.database = databaseName;
+      const tempPool = new Pool({
+        ...dbConfig,
+        database: databaseName
+      });
+      
+      await tempPool.query(query);
+      await tempPool.end();
     } else {
-      dbConfig.database = databaseName;
-    }
-    
-    // Reinitialize connection with the specific database
-    if (dbType === 'postgresql') {
-      connectionPool = new Pool(dbConfig);
-    } else {
-      connectionPool = mysql.createPool(dbConfig);
-    }
-    
-    await executeQuery(query);
-    
-    // Restore original config
-    Object.assign(dbConfig, originalConfig);
-    if (dbType === 'postgresql') {
-      connectionPool = new Pool(dbConfig);
-    } else {
-      connectionPool = mysql.createPool(dbConfig);
+      // For MySQL, create a temporary connection to the specific database
+      const tempPool = mysql.createPool({
+        ...dbConfig,
+        database: databaseName
+      });
+      
+      await tempPool.execute(query);
+      await tempPool.end();
     }
     
     return { success: true, message: `Table '${tableName}' created successfully in database '${databaseName}'` };
   } catch (error) {
     console.error('Error creating table:', error);
+    console.error('Table creation details:', {
+      databaseName,
+      tableName,
+      tableSchema,
+      errorMessage: error.message,
+      errorCode: error.code
+    });
     throw error;
   }
 };
@@ -459,29 +469,24 @@ export const deleteTable = async (databaseName, tableName) => {
       query = `DROP TABLE IF EXISTS \`${tableName}\``;
     }
     
-    // Switch to the specific database for table deletion
-    const originalConfig = { ...dbConfig };
+    // Create a temporary connection to the specific database
     if (dbType === 'postgresql') {
-      dbConfig.database = databaseName;
+      const tempPool = new Pool({
+        ...dbConfig,
+        database: databaseName
+      });
+      
+      await tempPool.query(query);
+      await tempPool.end();
     } else {
-      dbConfig.database = databaseName;
-    }
-    
-    // Reinitialize connection with the specific database
-    if (dbType === 'postgresql') {
-      connectionPool = new Pool(dbConfig);
-    } else {
-      connectionPool = mysql.createPool(dbConfig);
-    }
-    
-    await executeQuery(query);
-    
-    // Restore original config
-    Object.assign(dbConfig, originalConfig);
-    if (dbType === 'postgresql') {
-      connectionPool = new Pool(dbConfig);
-    } else {
-      connectionPool = mysql.createPool(dbConfig);
+      // For MySQL, create a temporary connection to the specific database
+      const tempPool = mysql.createPool({
+        ...dbConfig,
+        database: databaseName
+      });
+      
+      await tempPool.execute(query);
+      await tempPool.end();
     }
     
     return { success: true, message: `Table '${tableName}' deleted successfully from database '${databaseName}'` };

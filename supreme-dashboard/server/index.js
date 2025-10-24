@@ -992,7 +992,17 @@ fastify.post('/api/database/table/create', { preHandler: [authenticateToken, req
     return { ...result, mock: false };
   } catch (error) {
     console.error('Error creating table:', error);
-    return reply.code(500).send({ error: 'Failed to create table' });
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      database,
+      name,
+      schema
+    });
+    return reply.code(500).send({ 
+      error: 'Failed to create table',
+      details: error.message 
+    });
   }
 });
 

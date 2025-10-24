@@ -121,7 +121,7 @@ export const validateCommand = (command) => {
     'mkfs.jfs', 'mkfs.ntfs', 'mkfs.vfat',
     'mkfs.fat', 'mkfs.msdos', 'mkfs.udf',
     'mkfs.iso9660', 'mkfs.udf', 'mkfs.udf',
-    'mkfs.udf', 'mkfs.udf', 'mkfs.udf'
+    'mkfs.udf', 'mkfs.udf', 'mkfs.udf', 'cd'
   ];
   
   const commandLower = command.toLowerCase();
@@ -232,6 +232,54 @@ export const validateProjectName = (request, reply, done) => {
     errors.name = 'Project name must be at least 2 characters';
   } else if (!/^[a-zA-Z0-9-_]+$/.test(name)) {
     errors.name = 'Project name can only contain letters, numbers, hyphens, and underscores';
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return reply.code(400).send({ 
+      error: 'Validation failed', 
+      details: errors 
+    });
+  }
+
+  done();
+};
+
+export const validateSupremeCommand = (request, reply, done) => {
+  const { command, args } = request.body;
+  const errors = {};
+
+  // Validate command exists
+  if (!command || typeof command !== 'string') {
+    errors.command = 'Command is required and must be a string';
+  } else if (command.trim().length === 0) {
+    errors.command = 'Command cannot be empty';
+  } else if (command.length > 100) {
+    errors.command = 'Command must be less than 100 characters';
+  }
+
+  // Validate args if provided
+  if (args !== undefined) {
+    if (!Array.isArray(args)) {
+      errors.args = 'Arguments must be an array';
+    } else if (args.length > 20) {
+      errors.args = 'Maximum 20 arguments allowed';
+    } else {
+      // Validate each argument
+      args.forEach((arg, index) => {
+        if (typeof arg !== 'string') {
+          errors[`args.${index}`] = `Argument ${index} must be a string`;
+        } else if (arg.length > 200) {
+          errors[`args.${index}`] = `Argument ${index} must be less than 200 characters`;
+        } else if (!/^[a-zA-Z0-9\-_\.\/\s]+$/.test(arg)) {
+          errors[`args.${index}`] = `Argument ${index} contains invalid characters`;
+        }
+      });
+    }
+  }
+
+  // Additional security checks for supreme command
+  if (command && !validateCommand(command)) {
+    errors.command = 'Command contains potentially dangerous operations';
   }
 
   if (Object.keys(errors).length > 0) {

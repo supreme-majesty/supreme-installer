@@ -372,6 +372,61 @@ fastify.get('/api/logs', { preHandler: authenticateToken }, async (request, repl
   }
 });
 
+// Test endpoint to verify server is using updated code
+fastify.get('/api/test', async (request, reply) => {
+  return { message: 'Server is using updated code', timestamp: new Date().toISOString() };
+});
+
+// Platform configuration route (temporarily without auth for testing)
+fastify.get('/api/platform', async (request, reply) => {
+  console.log('[PLATFORM API] Request received at:', new Date().toISOString());
+  try {
+    // Check if XAMPP is installed
+    const { existsSync } = await import('fs');
+    const xamppPath = '/opt/lampp';
+    const isXamppInstalled = existsSync(xamppPath);
+    console.log('[PLATFORM API] XAMPP check - path:', xamppPath, 'exists:', isXamppInstalled);
+    
+    if (isXamppInstalled) {
+      console.log('[PLATFORM API] XAMPP detected - returning XAMPP paths');
+      // XAMPP detected - use XAMPP paths
+      return {
+        webroot: '/opt/lampp/htdocs/codes',
+        baseWebroot: '/opt/lampp/htdocs',
+        projectFolder: 'codes',
+        vhostsPath: '/opt/lampp/etc/extra/httpd-vhosts.conf',
+        apacheRestartCmd: 'sudo /opt/lampp/lampp restart',
+        certRoot: '/opt/lampp/etc/ssl',
+        platform: 'linux'
+      };
+    } else {
+      console.log('[PLATFORM API] XAMPP not detected - using system Apache');
+      // Fallback to system Apache
+      return {
+        webroot: '/var/www/html/codes',
+        baseWebroot: '/var/www/html',
+        projectFolder: 'codes',
+        vhostsPath: '/etc/apache2/sites-available/000-default.conf',
+        apacheRestartCmd: 'sudo systemctl restart apache2',
+        certRoot: '/etc/ssl/supreme',
+        platform: 'linux'
+      };
+    }
+  } catch (error) {
+    console.error('Error detecting platform configuration:', error);
+    // Fallback to default values
+    return {
+      webroot: '/var/www/html/codes',
+      baseWebroot: '/var/www/html',
+      projectFolder: 'codes',
+      vhostsPath: '/etc/apache2/sites-available/000-default.conf',
+      apacheRestartCmd: 'sudo systemctl restart apache2',
+      certRoot: '/etc/ssl/supreme',
+      platform: 'linux'
+    };
+  }
+});
+
 // System info route
 fastify.get('/api/system', { preHandler: authenticateToken }, async (request, reply) => {
   const uptime = process.uptime();

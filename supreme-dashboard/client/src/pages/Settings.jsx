@@ -52,13 +52,121 @@ const Settings = () => {
     loadSettings();
   }, []);
 
-  const loadSettings = () => {
-    const savedSettings = localStorage.getItem('supreme-dashboard-settings');
-    if (savedSettings) {
-      try {
-        const parsedSettings = JSON.parse(savedSettings);
-        // Ensure all required sections exist
-        const defaultSettings = {
+  const loadSettings = async () => {
+    try {
+      // First, get platform configuration from API
+      const platformResponse = await fetch('/api/platform', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      let platformConfig = {};
+      if (platformResponse.ok) {
+        platformConfig = await platformResponse.json();
+      }
+      
+      const savedSettings = localStorage.getItem('supreme-dashboard-settings');
+      if (savedSettings) {
+        try {
+          const parsedSettings = JSON.parse(savedSettings);
+          // Ensure all required sections exist
+          const defaultSettings = {
+            general: {
+              theme: 'dark',
+              language: 'en',
+              timezone: 'UTC',
+              notifications: true,
+              autoSave: true
+            },
+            supreme: {
+              tld: 'test',
+              webroot: platformConfig.webroot || '/var/www/html',
+              defaultProtocol: 'https',
+              enableDatabase: true,
+              apacheRestartCmd: platformConfig.apacheRestartCmd || 'sudo systemctl restart apache2',
+              certDir: platformConfig.certRoot || '/etc/ssl/certs',
+              vhostsPath: platformConfig.vhostsPath || '/etc/apache2/sites-available'
+            },
+            development: {
+              hotReload: true,
+              debugMode: false,
+              logLevel: 'info',
+              port: 5000,
+              host: 'localhost'
+            },
+            security: {
+              enableHttps: true,
+              enableCors: true,
+              sessionTimeout: 30,
+              maxLoginAttempts: 5
+            },
+            database: {
+              enabled: true,
+              host: 'localhost',
+              port: 3306,
+              name: 'supreme_dev',
+              username: 'root',
+              password: ''
+            }
+          };
+          
+          setSettings({
+            ...defaultSettings,
+            ...parsedSettings,
+            // Ensure each section has all required properties
+            general: { ...defaultSettings.general, ...parsedSettings.general },
+            supreme: { ...defaultSettings.supreme, ...parsedSettings.supreme },
+            development: { ...defaultSettings.development, ...parsedSettings.development },
+            security: { ...defaultSettings.security, ...parsedSettings.security },
+            database: { ...defaultSettings.database, ...parsedSettings.database }
+          });
+        } catch (error) {
+          console.error('Error parsing saved settings:', error);
+          // If parsing fails, use default settings with platform config
+          setSettings({
+            general: {
+              theme: 'dark',
+              language: 'en',
+              timezone: 'UTC',
+              notifications: true,
+              autoSave: true
+            },
+            supreme: {
+              tld: 'test',
+              webroot: platformConfig.webroot || '/var/www/html',
+              defaultProtocol: 'https',
+              enableDatabase: true,
+              apacheRestartCmd: platformConfig.apacheRestartCmd || 'sudo systemctl restart apache2',
+              certDir: platformConfig.certRoot || '/etc/ssl/certs',
+              vhostsPath: platformConfig.vhostsPath || '/etc/apache2/sites-available'
+            },
+            development: {
+              hotReload: true,
+              debugMode: false,
+              logLevel: 'info',
+              port: 5000,
+              host: 'localhost'
+            },
+            security: {
+              enableHttps: true,
+              enableCors: true,
+              sessionTimeout: 30,
+              maxLoginAttempts: 5
+            },
+            database: {
+              enabled: true,
+              host: 'localhost',
+              port: 3306,
+              name: 'supreme_dev',
+              username: 'root',
+              password: ''
+            }
+          });
+        }
+      } else {
+        // No saved settings, use platform config as defaults
+        setSettings({
           general: {
             theme: 'dark',
             language: 'en',
@@ -68,65 +176,12 @@ const Settings = () => {
           },
           supreme: {
             tld: 'test',
-            webroot: '/var/www/html',
+            webroot: platformConfig.webroot || '/var/www/html',
             defaultProtocol: 'https',
             enableDatabase: true,
-            apacheRestartCmd: 'sudo systemctl restart apache2',
-            certDir: '/etc/ssl/certs',
-            vhostsPath: '/etc/apache2/sites-available'
-          },
-          development: {
-            hotReload: true,
-            debugMode: false,
-            logLevel: 'info',
-            port: 5000,
-            host: 'localhost'
-          },
-          security: {
-            enableHttps: true,
-            enableCors: true,
-            sessionTimeout: 30,
-            maxLoginAttempts: 5
-          },
-          database: {
-            enabled: true,
-            host: 'localhost',
-            port: 3306,
-            name: 'supreme_dev',
-            username: 'root',
-            password: ''
-          }
-        };
-        
-        setSettings({
-          ...defaultSettings,
-          ...parsedSettings,
-          // Ensure each section has all required properties
-          general: { ...defaultSettings.general, ...parsedSettings.general },
-          supreme: { ...defaultSettings.supreme, ...parsedSettings.supreme },
-          development: { ...defaultSettings.development, ...parsedSettings.development },
-          security: { ...defaultSettings.security, ...parsedSettings.security },
-          database: { ...defaultSettings.database, ...parsedSettings.database }
-        });
-      } catch (error) {
-        console.error('Error parsing saved settings:', error);
-        // If parsing fails, use default settings
-        setSettings({
-          general: {
-            theme: 'dark',
-            language: 'en',
-            timezone: 'UTC',
-            notifications: true,
-            autoSave: true
-          },
-          supreme: {
-            tld: 'test',
-            webroot: '/var/www/html',
-            defaultProtocol: 'https',
-            enableDatabase: true,
-            apacheRestartCmd: 'sudo systemctl restart apache2',
-            certDir: '/etc/ssl/certs',
-            vhostsPath: '/etc/apache2/sites-available'
+            apacheRestartCmd: platformConfig.apacheRestartCmd || 'sudo systemctl restart apache2',
+            certDir: platformConfig.certRoot || '/etc/ssl/certs',
+            vhostsPath: platformConfig.vhostsPath || '/etc/apache2/sites-available'
           },
           development: {
             hotReload: true,
@@ -151,6 +206,48 @@ const Settings = () => {
           }
         });
       }
+    } catch (error) {
+      console.error('Error loading platform configuration:', error);
+      // Fallback to default settings if API fails
+      setSettings({
+        general: {
+          theme: 'dark',
+          language: 'en',
+          timezone: 'UTC',
+          notifications: true,
+          autoSave: true
+        },
+        supreme: {
+          tld: 'test',
+          webroot: '/var/www/html',
+          defaultProtocol: 'https',
+          enableDatabase: true,
+          apacheRestartCmd: 'sudo systemctl restart apache2',
+          certDir: '/etc/ssl/certs',
+          vhostsPath: '/etc/apache2/sites-available'
+        },
+        development: {
+          hotReload: true,
+          debugMode: false,
+          logLevel: 'info',
+          port: 5000,
+          host: 'localhost'
+        },
+        security: {
+          enableHttps: true,
+          enableCors: true,
+          sessionTimeout: 30,
+          maxLoginAttempts: 5
+        },
+        database: {
+          enabled: true,
+          host: 'localhost',
+          port: 3306,
+          name: 'supreme_dev',
+          username: 'root',
+          password: ''
+        }
+      });
     }
   };
 
@@ -379,7 +476,7 @@ const Settings = () => {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Web Root Directory</label>
+                    <label className="form-label">Web Root Directory {settings.supreme?.webroot}</label>
                     <input
                       type="text"
                       className="form-input"
@@ -387,7 +484,10 @@ const Settings = () => {
                       onChange={(e) => handleInputChange('supreme', 'webroot', e.target.value)}
                       placeholder="/var/www/html"
                     />
-                    <small className="form-help">Directory where your projects are stored</small>
+                    <small className="form-help">
+                      Directory where your projects are stored. 
+                      If XAMPP is detected, it will automatically use XAMPP's htdocs directory instead of /var/www/html.
+                    </small>
                   </div>
 
                   <div className="form-group">

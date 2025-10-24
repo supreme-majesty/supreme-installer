@@ -56,20 +56,23 @@ detect_apache_config() {
   VHOSTS_PATH=""
   APACHE_RESTART_CMD=""
   CERT_ROOT=""
+  HTDOCS_ROOT_DEFAULT=""
   
   if [[ "$PLATFORM" == "linux" ]] || [[ "$PLATFORM" == "wsl" ]]; then
-    # Check for XAMPP first
+    # Check for XAMPP first - prioritize XAMPP over system Apache
     if [[ -d "/opt/lampp" ]]; then
       if [[ -f "/opt/lampp/etc/extra/httpd-vhosts.conf" ]]; then
         VHOSTS_PATH="/opt/lampp/etc/extra/httpd-vhosts.conf"
         APACHE_RESTART_CMD="sudo /opt/lampp/lampp restart"
         CERT_ROOT="/opt/lampp/etc/ssl"
         HTDOCS_ROOT_DEFAULT="/opt/lampp/htdocs"
+        log "XAMPP detected: Using XAMPP web root directory"
       elif [[ -f "/opt/lampp/apache2/conf/extra/httpd-vhosts.conf" ]]; then
         VHOSTS_PATH="/opt/lampp/apache2/conf/extra/httpd-vhosts.conf"
         APACHE_RESTART_CMD="sudo /opt/lampp/lampp restart"
         CERT_ROOT="/opt/lampp/etc/ssl"
         HTDOCS_ROOT_DEFAULT="/opt/lampp/htdocs"
+        log "XAMPP detected: Using XAMPP web root directory"
       fi
     fi
     
@@ -86,17 +89,19 @@ detect_apache_config() {
           APACHE_RESTART_CMD="sudo systemctl restart apache2 || sudo service apache2 restart"
           CERT_ROOT="$windows_xampp/apache/conf/ssl"
           HTDOCS_ROOT_DEFAULT="$windows_xampp/htdocs"
+          log "Windows XAMPP detected: Using XAMPP web root directory"
         fi
       fi
     fi
     
-    # Fallback to system Apache
+    # Fallback to system Apache (only if XAMPP not found)
     if [[ -z "${VHOSTS_PATH:-}" ]]; then
       if command -v apache2ctl &>/dev/null || systemctl list-units --type=service | grep -q apache2; then
         VHOSTS_PATH="/etc/apache2/sites-available/000-default.conf"
         APACHE_RESTART_CMD="sudo systemctl restart apache2 || sudo service apache2 restart"
         CERT_ROOT="/etc/ssl/supreme"
         HTDOCS_ROOT_DEFAULT="/var/www/html"
+        log "XAMPP not found: Using system Apache with /var/www/html"
       fi
     fi
   else
@@ -115,6 +120,12 @@ detect_apache_config() {
   ok "Apache restart cmd: $APACHE_RESTART_CMD"
   ok "Default webroot: $HTDOCS_ROOT_DEFAULT"
   ok "Certificate root: $CERT_ROOT"
+  
+  # Export variables for external use
+  export HTDOCS_ROOT_DEFAULT
+  export VHOSTS_PATH
+  export APACHE_RESTART_CMD
+  export CERT_ROOT
 }
 
 # ----------------------

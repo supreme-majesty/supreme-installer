@@ -41,6 +41,12 @@
   transition: all 0.2s ease;
 }
 
+.control-select option {
+  background: #1a1a1a;
+  color: white;
+  padding: 0.5rem;
+}
+
 .control-select:focus,
 .control-input:focus {
   outline: none;

@@ -144,6 +144,12 @@
   transition: all 0.3s ease;
 }
 
+.form-input option {
+  background: #1a1a1a;
+  color: white;
+  padding: 0.5rem;
+}
+
 .form-input:focus {
   outline: none;
   border-color: #4f46e5;

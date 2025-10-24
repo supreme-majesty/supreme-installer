@@ -4,6 +4,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import InputModal from '../components/InputModal';
 import ConfirmModal from '../components/ConfirmModal';
 import TableCreationModal from '../components/TableCreationModal';
+import EditableTableStructure from '../components/EditableTableStructure';
 import './Database.css';
 
 const Database = () => {
@@ -213,6 +214,90 @@ const Database = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handler functions for editable table structure
+  const handleUpdateColumn = async (database, table, columnData) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Updating column:', { database, table, columnData });
+      
+      const response = await fetch(`/api/database/table/update-column`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          database,
+          table,
+          column: columnData
+        })
+      });
+      
+      console.log('Update column response status:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Update column success:', data);
+        // Refresh table structure
+        await getTableStructure(selectedTable);
+        return { success: true };
+      } else {
+        const data = await response.json();
+        console.error('Update column failed:', data);
+        setError(data.error || 'Failed to update column');
+        return { success: false, error: data.error };
+      }
+    } catch (error) {
+      setError('Network error: Failed to update column');
+      return { success: false, error: 'Network error' };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteColumn = async (database, table, columnName) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch(`/api/database/table/delete-column`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          database,
+          table,
+          column: columnName
+        })
+      });
+
+      if (response.ok) {
+        // Refresh table structure
+        await getTableStructure(selectedTable);
+        return { success: true };
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to delete column');
+        return { success: false, error: data.error };
+      }
+    } catch (error) {
+      setError('Network error: Failed to delete column');
+      return { success: false, error: 'Network error' };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddColumn = async (database, table) => {
+    // For now, we'll use the existing table creation modal
+    // In the future, we could create a dedicated "Add Column" modal
+    setShowCreateTableModal(true);
   };
 
   const fetchTableTemplates = async () => {
@@ -510,43 +595,15 @@ const Database = () => {
                 <LoadingSpinner size="small" text="Loading table structure..." />
               ) : tableStructure ? (
                 <div className="structure-content">
-                  <div className="structure-header">
-                    <h4>{selectedTable}</h4>
-                    <span className="table-info">
-                      {tableStructure.columns?.length || 0} columns, {tableStructure.indexes?.length || 0} indexes
-                    </span>
-                  </div>
-                  
-                  {/* Columns Table */}
-                  <div className="structure-section">
-                    <h5>Columns</h5>
-                    <div className="structure-table">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Name</th>
-                            <th>Type</th>
-                            <th>Nullable</th>
-                            <th>Key</th>
-                            <th>Default</th>
-                            <th>Extra</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {tableStructure.columns?.map((column, index) => (
-                            <tr key={index}>
-                              <td><strong>{column.name}</strong></td>
-                              <td>{column.type}</td>
-                              <td>{column.nullable ? 'Yes' : 'No'}</td>
-                              <td>{column.key || '-'}</td>
-                              <td>{column.default || '-'}</td>
-                              <td>{column.extra || '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                  <EditableTableStructure
+                    key={`${selectedDb}-${selectedTable}-${JSON.stringify(tableStructure)}`}
+                    tableStructure={tableStructure}
+                    selectedDb={selectedDb}
+                    selectedTable={selectedTable}
+                    onUpdateColumn={handleUpdateColumn}
+                    onDeleteColumn={handleDeleteColumn}
+                    onAddColumn={handleAddColumn}
+                  />
 
                   {/* Indexes Table */}
                   {tableStructure.indexes && tableStructure.indexes.length > 0 && (

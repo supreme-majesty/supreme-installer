@@ -52,7 +52,21 @@ const loadDatabaseConfig = () => {
       
       return true;
     }
-    return false;
+    
+    // Fallback: Set up default database configuration if no config file
+    console.log('No database config found, setting up default MySQL configuration');
+    dbType = 'mysql';
+    dbConfig = {
+      host: 'localhost',
+      port: 3306,
+      user: 'root',
+      password: '',
+      database: 'mysql',
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0
+    };
+    return true;
   } catch (error) {
     console.error('Error loading database config:', error);
     return false;
@@ -548,6 +562,233 @@ export const testConnection = async () => {
     return { connected: true, test: result[0], type: dbType };
   } catch (error) {
     return { connected: false, error: error.message };
+  }
+};
+
+// Update column in a table
+export const updateColumn = async (databaseName, tableName, columnData) => {
+  try {
+    console.log('updateColumn called with:', { databaseName, tableName, columnData });
+    console.log('Database config:', { dbType, dbConfig, connectionPool: !!connectionPool });
+    
+    if (!connectionPool) {
+      throw new Error('Database connection not initialized');
+    }
+    
+    const { name, type, nullable, key, default: defaultValue, extra, originalName } = columnData;
+    
+    // Check if column name has changed
+    const nameChanged = originalName && originalName !== name;
+    
+    // Use the existing connection pool and select database first
+    // Use query() instead of execute() for USE statement (not supported in prepared statements)
+    await connectionPool.query(`USE \`${databaseName}\``);
+    
+    // Clean up the type to handle MySQL-specific syntax
+    let cleanType = type;
+    if (type.includes('mediumtext(')) {
+      cleanType = 'MEDIUMTEXT';
+    } else if (type.includes('text(')) {
+      cleanType = 'TEXT';
+    } else if (type.includes('longtext(')) {
+      cleanType = 'LONGTEXT';
+    }
+    
+    if (nameChanged) {
+      // Use CHANGE COLUMN to rename and modify in one operation
+      let columnDef = `\`${name}\` ${cleanType}`;
+      
+      if (!nullable) {
+        columnDef += ' NOT NULL';
+      }
+      
+      if (defaultValue && defaultValue !== 'NULL' && defaultValue !== null) {
+        columnDef += ` DEFAULT '${defaultValue}'`;
+      }
+      
+      if (extra) {
+        columnDef += ` ${extra}`;
+      }
+      
+      const changeQuery = `ALTER TABLE \`${tableName}\` CHANGE COLUMN \`${originalName}\` ${columnDef}`;
+      console.log('Generated CHANGE query:', changeQuery);
+      await executeQuery(changeQuery);
+    } else {
+      // Just modify column properties without renaming
+      let columnDef = `\`${name}\` ${cleanType}`;
+      
+      if (!nullable) {
+        columnDef += ' NOT NULL';
+      }
+      
+      if (defaultValue && defaultValue !== 'NULL' && defaultValue !== null) {
+        columnDef += ` DEFAULT '${defaultValue}'`;
+      }
+      
+      if (extra) {
+        columnDef += ` ${extra}`;
+      }
+      
+      const alterQuery = `ALTER TABLE \`${tableName}\` MODIFY COLUMN ${columnDef}`;
+      console.log('Generated ALTER query:', alterQuery);
+      await executeQuery(alterQuery);
+    }
+    
+    return { 
+      success: true, 
+      message: `Column '${name}' updated successfully in table '${tableName}'` 
+    };
+  } catch (error) {
+    console.error('Error updating column:', error);
+    console.error('Column update details:', {
+      databaseName,
+      tableName,
+      columnData,
+      errorMessage: error.message,
+      errorCode: error.code
+    });
+    throw error;
+  }
+};
+
+// Delete column from a table
+export const deleteColumn = async (databaseName, tableName, columnName) => {
+  try {
+    console.log('deleteColumn called with:', { databaseName, tableName, columnName });
+    
+    if (!dbType || !dbConfig) {
+      throw new Error('Database not properly initialized');
+    }
+    
+    let query;
+    if (dbType === 'postgresql') {
+      query = `ALTER TABLE "${tableName}" DROP COLUMN "${columnName}"`;
+    } else {
+      query = `ALTER TABLE \`${tableName}\` DROP COLUMN \`${columnName}\``;
+    }
+    
+    console.log('Generated DROP COLUMN query:', query);
+    
+    // Create a temporary connection to the specific database
+    if (dbType === 'postgresql') {
+      const tempPool = new Pool({
+        ...dbConfig,
+        database: databaseName
+      });
+      
+      await tempPool.query(query);
+      await tempPool.end();
+    } else {
+      // For MySQL, create a temporary connection to the specific database
+      const tempPool = mysql.createPool({
+        ...dbConfig,
+        database: databaseName
+      });
+      
+      await tempPool.execute(query);
+      await tempPool.end();
+    }
+    
+    return { 
+      success: true, 
+      message: `Column '${columnName}' deleted successfully from table '${tableName}'` 
+    };
+  } catch (error) {
+    console.error('Error deleting column:', error);
+    console.error('Column deletion details:', {
+      databaseName,
+      tableName,
+      columnName,
+      errorMessage: error.message,
+      errorCode: error.code
+    });
+    throw error;
+  }
+};
+
+// Add new column to a table
+export const addColumn = async (databaseName, tableName, columnData) => {
+  try {
+    console.log('addColumn called with:', { databaseName, tableName, columnData });
+    
+    if (!dbType || !dbConfig) {
+      throw new Error('Database not properly initialized');
+    }
+    
+    const { name, type, nullable, key, default: defaultValue, extra } = columnData;
+    
+    // Build ALTER TABLE ADD COLUMN statement
+    let alterQuery;
+    if (dbType === 'postgresql') {
+      let columnDef = `"${name}" ${type}`;
+      
+      if (!nullable) {
+        columnDef += ' NOT NULL';
+      }
+      
+      if (defaultValue && defaultValue !== 'NULL') {
+        columnDef += ` DEFAULT '${defaultValue}'`;
+      }
+      
+      if (extra) {
+        columnDef += ` ${extra}`;
+      }
+      
+      alterQuery = `ALTER TABLE "${tableName}" ADD COLUMN ${columnDef}`;
+    } else {
+      let columnDef = `\`${name}\` ${type}`;
+      
+      if (!nullable) {
+        columnDef += ' NOT NULL';
+      }
+      
+      if (defaultValue && defaultValue !== 'NULL') {
+        columnDef += ` DEFAULT '${defaultValue}'`;
+      }
+      
+      if (extra) {
+        columnDef += ` ${extra}`;
+      }
+      
+      alterQuery = `ALTER TABLE \`${tableName}\` ADD COLUMN ${columnDef}`;
+    }
+    
+    console.log('Generated ADD COLUMN query:', alterQuery);
+    
+    // Create a temporary connection to the specific database
+    if (dbType === 'postgresql') {
+      const tempPool = new Pool({
+        ...dbConfig,
+        database: databaseName
+      });
+      
+      await tempPool.query(alterQuery);
+      await tempPool.end();
+    } else {
+      // For MySQL, create a temporary connection to the specific database
+      const tempPool = mysql.createPool({
+        ...dbConfig,
+        database: databaseName
+      });
+      
+      await tempPool.execute(alterQuery);
+      await tempPool.end();
+    }
+    
+    return { 
+      success: true, 
+      message: `Column '${name}' added successfully to table '${tableName}'` 
+    };
+  } catch (error) {
+    console.error('Error adding column:', error);
+    console.error('Column addition details:', {
+      databaseName,
+      tableName,
+      columnData,
+      errorMessage: error.message,
+      errorCode: error.code
+    });
+    throw error;
   }
 };
 

@@ -21,7 +21,10 @@ import {
   createTable,
   deleteTable,
   getTableTemplates,
-  testConnection 
+  testConnection,
+  updateColumn,
+  deleteColumn,
+  addColumn
 } from './middleware/database.js';
 
 const execAsync = promisify(exec);
@@ -1045,6 +1048,91 @@ fastify.get('/api/database/table/templates', { preHandler: authenticateToken }, 
   } catch (error) {
     console.error('Error getting table templates:', error);
     return reply.code(500).send({ error: 'Failed to get table templates' });
+  }
+});
+
+// Update column endpoint
+fastify.put('/api/database/table/update-column', { preHandler: [authenticateToken, requireRole(['admin'])] }, async (request, reply) => {
+  const { database, table, column } = request.body;
+  
+  try {
+    if (!database || !table || !column) {
+      return reply.code(400).send({ error: 'Database name, table name, and column data are required' });
+    }
+    
+    if (!dbInitialized) {
+      return {
+        success: true,
+        message: `Column '${column.name}' updated successfully in table '${table}' (mock)`,
+        mock: true
+      };
+    }
+    
+    const result = await updateColumn(database, table, column);
+    return { ...result, mock: false };
+  } catch (error) {
+    console.error('Error updating column:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      database,
+      table,
+      column
+    });
+    return reply.code(500).send({ 
+      error: 'Failed to update column',
+      details: error.message 
+    });
+  }
+});
+
+// Delete column endpoint
+fastify.delete('/api/database/table/delete-column', { preHandler: [authenticateToken, requireRole(['admin'])] }, async (request, reply) => {
+  try {
+    const { database, table, column } = request.body;
+    
+    if (!database || !table || !column) {
+      return reply.code(400).send({ error: 'Database name, table name, and column name are required' });
+    }
+    
+    if (!dbInitialized) {
+      return {
+        success: true,
+        message: `Column '${column}' deleted successfully from table '${table}' (mock)`,
+        mock: true
+      };
+    }
+    
+    const result = await deleteColumn(database, table, column);
+    return { ...result, mock: false };
+  } catch (error) {
+    console.error('Error deleting column:', error);
+    return reply.code(500).send({ error: 'Failed to delete column' });
+  }
+});
+
+// Add column endpoint
+fastify.post('/api/database/table/add-column', { preHandler: [authenticateToken, requireRole(['admin'])] }, async (request, reply) => {
+  try {
+    const { database, table, column } = request.body;
+    
+    if (!database || !table || !column) {
+      return reply.code(400).send({ error: 'Database name, table name, and column data are required' });
+    }
+    
+    if (!dbInitialized) {
+      return {
+        success: true,
+        message: `Column '${column.name}' added successfully to table '${table}' (mock)`,
+        mock: true
+      };
+    }
+    
+    const result = await addColumn(database, table, column);
+    return { ...result, mock: false };
+  } catch (error) {
+    console.error('Error adding column:', error);
+    return reply.code(500).send({ error: 'Failed to add column' });
   }
 });
 

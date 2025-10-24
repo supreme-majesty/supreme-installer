@@ -767,7 +767,8 @@ export const addColumn = async (databaseName, tableName, columnData) => {
       await tempPool.end();
     } else {
       // For MySQL, switch to the database and execute the query
-      await executeQuery(`USE \`${databaseName}\``);
+      // Use query() instead of execute() for USE statement (not supported in prepared statements)
+      await connectionPool.query(`USE \`${databaseName}\``);
       await executeQuery(alterQuery);
     }
     

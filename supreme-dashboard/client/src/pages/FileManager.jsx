@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
+import InputModal from '../components/InputModal';
+import ConfirmModal from '../components/ConfirmModal';
 import './FileManager.css';
 
 const FileManager = () => {
@@ -14,6 +16,10 @@ const FileManager = () => {
   const [activeTab, setActiveTab] = useState('browser');
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState('list'); // list or grid
+  const [showCreateFileModal, setShowCreateFileModal] = useState(false);
+  const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
+  const [showDeleteFileModal, setShowDeleteFileModal] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState(null);
 
   useEffect(() => {
     fetchFiles(currentPath);
@@ -127,11 +133,12 @@ const FileManager = () => {
     }
   };
 
-  const deleteFile = async (filePath) => {
-    if (!window.confirm('Are you sure you want to delete this file/folder?')) {
-      return;
-    }
+  const handleDeleteFile = (filePath) => {
+    setFileToDelete(filePath);
+    setShowDeleteFileModal(true);
+  };
 
+  const deleteFile = async (filePath) => {
     try {
       setLoading(true);
       const response = await fetch('/api/files/delete', {
@@ -301,19 +308,13 @@ const FileManager = () => {
                     
                     <button 
                       className="btn btn-primary btn-sm"
-                      onClick={() => {
-                        const name = prompt('Enter file name:');
-                        if (name) createFile(name, false);
-                      }}
+                      onClick={() => setShowCreateFileModal(true)}
                     >
                       + File
                     </button>
                     <button 
                       className="btn btn-secondary btn-sm"
-                      onClick={() => {
-                        const name = prompt('Enter folder name:');
-                        if (name) createFile(name, true);
-                      }}
+                      onClick={() => setShowCreateFolderModal(true)}
                     >
                       + Folder
                     </button>
@@ -381,7 +382,7 @@ const FileManager = () => {
                             className="btn btn-danger btn-sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              deleteFile(file.path);
+                              handleDeleteFile(file.path);
                             }}
                             title="Delete"
                           >
@@ -455,6 +456,41 @@ const FileManager = () => {
           </div>
         )}
       </div>
+
+      {/* Create File Modal */}
+      <InputModal
+        isOpen={showCreateFileModal}
+        onClose={() => setShowCreateFileModal(false)}
+        onSubmit={(name) => createFile(name, false)}
+        title="Create New File"
+        placeholder="Enter file name"
+        validationMessage="File name is required"
+      />
+
+      {/* Create Folder Modal */}
+      <InputModal
+        isOpen={showCreateFolderModal}
+        onClose={() => setShowCreateFolderModal(false)}
+        onSubmit={(name) => createFile(name, true)}
+        title="Create New Folder"
+        placeholder="Enter folder name"
+        validationMessage="Folder name is required"
+      />
+
+      {/* Delete File Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteFileModal}
+        onClose={() => {
+          setShowDeleteFileModal(false);
+          setFileToDelete(null);
+        }}
+        onConfirm={() => deleteFile(fileToDelete)}
+        title="Delete File/Folder"
+        message="Are you sure you want to delete this file/folder? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
     </div>
   );
 };

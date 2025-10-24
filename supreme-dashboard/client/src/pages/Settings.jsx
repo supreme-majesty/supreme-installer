@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import ConfirmModal from '../components/ConfirmModal';
 import './Settings.css';
 
 const Settings = () => {
@@ -45,6 +46,7 @@ const Settings = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [activeTab, setActiveTab] = useState('general');
+  const [showResetModal, setShowResetModal] = useState(false);
   const { token } = useAuth();
 
   useEffect(() => {
@@ -294,48 +296,50 @@ const Settings = () => {
   };
 
   const handleReset = () => {
-    if (window.confirm('Are you sure you want to reset all settings to default?')) {
-      setSettings({
-        general: {
-          theme: 'dark',
-          language: 'en',
-          timezone: 'UTC',
-          notifications: true,
-          autoSave: true
-        },
-        supreme: {
-          tld: 'test',
-          webroot: '/var/www/html',
-          defaultProtocol: 'https',
-          enableDatabase: true,
-          apacheRestartCmd: 'sudo systemctl restart apache2',
-          certDir: '/etc/ssl/certs',
-          vhostsPath: '/etc/apache2/sites-available'
-        },
-        development: {
-          hotReload: true,
-          debugMode: false,
-          logLevel: 'info',
-          port: 5000,
-          host: 'localhost'
-        },
-        security: {
-          enableHttps: true,
-          enableCors: true,
-          sessionTimeout: 30,
-          maxLoginAttempts: 5
-        },
-        database: {
-          enabled: true,
-          host: 'localhost',
-          port: 3306,
-          name: 'supreme_dev',
-          username: 'root',
-          password: ''
-        }
-      });
-      setMessage({ type: 'info', text: 'Settings reset to default values.' });
-    }
+    setShowResetModal(true);
+  };
+
+  const resetSettings = () => {
+    setSettings({
+      general: {
+        theme: 'dark',
+        language: 'en',
+        timezone: 'UTC',
+        notifications: true,
+        autoSave: true
+      },
+      supreme: {
+        tld: 'test',
+        webroot: '/var/www/html',
+        defaultProtocol: 'https',
+        enableDatabase: true,
+        apacheRestartCmd: 'sudo systemctl restart apache2',
+        certDir: '/etc/ssl/certs',
+        vhostsPath: '/etc/apache2/sites-available'
+      },
+      development: {
+        hotReload: true,
+        debugMode: false,
+        logLevel: 'info',
+        port: 5000,
+        host: 'localhost'
+      },
+      security: {
+        enableHttps: true,
+        enableCors: true,
+        sessionTimeout: 30,
+        maxLoginAttempts: 5
+      },
+      database: {
+        enabled: true,
+        host: 'localhost',
+        port: 3306,
+        name: 'supreme_dev',
+        username: 'root',
+        password: ''
+      }
+    });
+    setMessage({ type: 'info', text: 'Settings reset to default values.' });
   };
 
   const tabs = [
@@ -786,6 +790,18 @@ const Settings = () => {
           </div>
         </div>
       </div>
+
+      {/* Reset Settings Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showResetModal}
+        onClose={() => setShowResetModal(false)}
+        onConfirm={resetSettings}
+        title="Reset Settings"
+        message="Are you sure you want to reset all settings to default? This action cannot be undone."
+        confirmText="Reset"
+        cancelText="Cancel"
+        type="warning"
+      />
     </div>
   );
 };

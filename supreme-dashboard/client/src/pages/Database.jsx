@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
+import InputModal from '../components/InputModal';
+import ConfirmModal from '../components/ConfirmModal';
 import './Database.css';
 
 const Database = () => {
@@ -15,6 +17,9 @@ const Database = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('browser');
   const [tableStructure, setTableStructure] = useState(null);
+  const [showCreateDbModal, setShowCreateDbModal] = useState(false);
+  const [showDeleteDbModal, setShowDeleteDbModal] = useState(false);
+  const [dbToDelete, setDbToDelete] = useState(null);
 
   useEffect(() => {
     if (token) {
@@ -162,11 +167,12 @@ const Database = () => {
     }
   };
 
-  const deleteDatabase = async (dbName) => {
-    if (!window.confirm(`Are you sure you want to delete database "${dbName}"? This action cannot be undone.`)) {
-      return;
-    }
+  const handleDeleteDatabase = (dbName) => {
+    setDbToDelete(dbName);
+    setShowDeleteDbModal(true);
+  };
 
+  const deleteDatabase = async (dbName) => {
     try {
       setLoading(true);
       const response = await fetch(`/api/database/delete/${dbName}`, {
@@ -244,10 +250,7 @@ const Database = () => {
                     <h3>Databases</h3>
                     <button 
                       className="btn btn-primary btn-sm"
-                      onClick={() => {
-                        const name = prompt('Enter database name:');
-                        if (name) createDatabase(name);
-                      }}
+                      onClick={() => setShowCreateDbModal(true)}
                     >
                       + New
                     </button>
@@ -277,7 +280,7 @@ const Database = () => {
                               className="btn btn-danger btn-sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                deleteDatabase(db.name);
+                                handleDeleteDatabase(db.name);
                               }}
                               title="Delete database"
                             >
@@ -500,6 +503,31 @@ const Database = () => {
           </div>
         )}
       </div>
+
+      {/* Create Database Modal */}
+      <InputModal
+        isOpen={showCreateDbModal}
+        onClose={() => setShowCreateDbModal(false)}
+        onSubmit={(name) => createDatabase(name)}
+        title="Create New Database"
+        placeholder="Enter database name"
+        validationMessage="Database name is required"
+      />
+
+      {/* Delete Database Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteDbModal}
+        onClose={() => {
+          setShowDeleteDbModal(false);
+          setDbToDelete(null);
+        }}
+        onConfirm={() => deleteDatabase(dbToDelete)}
+        title="Delete Database"
+        message={`Are you sure you want to delete database "${dbToDelete}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
     </div>
   );
 };

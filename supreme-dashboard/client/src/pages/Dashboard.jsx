@@ -35,12 +35,12 @@ const Dashboard = () => {
         }
       });
       
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
-      } else {
-        console.error('Failed to fetch dashboard stats:', response.status);
+      if (!response.ok) {
+        throw new Error('Failed to fetch dashboard stats');
       }
+      
+      const data = await response.json();
+      setStats(data);
     } catch (error) {
       console.error('Failed to fetch dashboard stats:', error);
     } finally {

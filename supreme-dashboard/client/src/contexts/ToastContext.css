@@ -1,0 +1,93 @@
+/* Toast Context Styles */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  max-width: 500px;
+  pointer-events: none;
+}
+
+.toast-container .toast {
+  pointer-events: auto;
+}
+
+/* Toast positioning variants */
+.toast-container.top-left {
+  top: 20px;
+  left: 20px;
+  right: auto;
+}
+
+.toast-container.top-center {
+  top: 20px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
+
+.toast-container.top-right {
+  top: 20px;
+  right: 20px;
+  left: auto;
+}
+
+.toast-container.bottom-left {
+  top: auto;
+  bottom: 20px;
+  left: 20px;
+  right: auto;
+}
+
+.toast-container.bottom-center {
+  top: auto;
+  bottom: 20px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
+
+.toast-container.bottom-right {
+  top: auto;
+  bottom: 20px;
+  right: 20px;
+  left: auto;
+}
+
+/* Toast limit and overflow */
+.toast-container.limit-3 .toast:nth-child(n+4) {
+  display: none;
+}
+
+.toast-container.limit-5 .toast:nth-child(n+6) {
+  display: none;
+}
+
+.toast-container.limit-10 .toast:nth-child(n+11) {
+  display: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .toast-container {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+  
+  .toast-container.top-center,
+  .toast-container.bottom-center {
+    left: 10px;
+    right: 10px;
+    transform: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .toast-container {
+    top: 5px;
+    right: 5px;
+    left: 5px;
+  }
+}

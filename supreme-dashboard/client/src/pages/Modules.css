@@ -79,6 +79,20 @@
   margin-bottom: 32px;
 }
 
+.modules-table .table tbody tr {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.modules-table .table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.modules-table .table tbody tr.selected {
+  background-color: rgba(79, 70, 229, 0.2);
+  border-left: 3px solid #4f46e5;
+}
+
 .module-info {
   display: flex;
   flex-direction: column;
@@ -94,6 +108,28 @@
 .module-description {
   color: rgba(255, 255, 255, 0.7);
   font-size: 0.75rem;
+}
+
+.module-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.feature-tag {
+  background: rgba(79, 70, 229, 0.2);
+  color: #4f46e5;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 500;
+}
+
+.feature-more {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.65rem;
+  font-style: italic;
 }
 
 .version-badge {
@@ -159,6 +195,139 @@
   color: rgba(255, 255, 255, 0.7);
   margin-bottom: 20px;
   line-height: 1.5;
+}
+
+.module-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.module-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.module-header h4 {
+  color: white;
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.module-description p {
+  color: rgba(255, 255, 255, 0.8);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.module-features-list h5,
+.module-dependencies h5,
+.dependency-status h5 {
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+
+.module-features-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.module-features-list li {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.875rem;
+  padding: 4px 0;
+  position: relative;
+  padding-left: 16px;
+}
+
+.module-features-list li::before {
+  content: '•';
+  color: #4f46e5;
+  position: absolute;
+  left: 0;
+}
+
+.dependency-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dependency-tag {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.dependency-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dependency-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+}
+
+.dependency-name {
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.status-indicator {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.status-indicator.available {
+  color: #10b981;
+}
+
+.status-indicator.missing {
+  color: #ef4444;
+}
+
+.health-indicator {
+  margin-left: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.health-indicator.healthy {
+  color: #10b981;
+}
+
+.health-indicator.error {
+  color: #ef4444;
+}
+
+.health-indicator.unknown {
+  color: #f59e0b;
+}
+
+.health-indicator.disabled {
+  color: #6b7280;
+}
+
+.module-actions-detail {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .info-placeholder {

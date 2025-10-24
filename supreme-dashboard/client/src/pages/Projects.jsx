@@ -24,13 +24,13 @@ const Projects = () => {
         }
       });
       
-      if (response.ok) {
-        const data = await response.json();
-        setProjects(data.projects || []);
-      } else {
-        setError('Failed to fetch projects');
-        console.error('Error fetching projects:', response.status);
+      if (!response.ok) {
+        throw new Error('Failed to fetch projects');
       }
+      
+      const data = await response.json();
+      setProjects(data.projects || []);
+      setError(null);
     } catch (error) {
       setError('Failed to fetch projects');
       console.error('Error fetching projects:', error);
@@ -44,19 +44,23 @@ const Projects = () => {
       const response = await fetch(`/api/projects/${projectName}/${action}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to ${action} project`);
+      }
+      
       const result = await response.json();
       
       if (result.success) {
         // Refresh projects list
         await fetchProjects();
-      } else {
-        alert(`Failed to ${action} project: ${result.error}`);
       }
     } catch (error) {
-      alert(`Error ${action}ing project: ${error.message}`);
+      console.error(`Error ${action}ing project:`, error);
     }
   };
 

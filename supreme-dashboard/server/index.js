@@ -98,6 +98,7 @@ const getDirectorySize = async (dirPath) => {
 // Authentication routes
 fastify.post('/api/auth/login', { preHandler: validateLogin }, async (request, reply) => {
   try {
+    console.log('Login attempt:', request.body);
     const { username, password } = request.body;
     
     const user = users.find(u => u.username === username);
@@ -452,66 +453,178 @@ fastify.get('/api/system', { preHandler: authenticateToken }, async (request, re
   };
 });
 
+// Import modules service
+import modulesService from './services/modules.js';
+
+// Health check endpoint
+fastify.get('/api/health', async (request, reply) => {
+  return {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  };
+});
+
 // Modules route
 fastify.get('/api/modules', { preHandler: authenticateToken }, async (request, reply) => {
-  // Mock data for installed modules
-  const modules = [
-    {
-      id: 'platform',
-      name: 'Platform Detection',
-      version: '2.0.0',
-      description: 'Cross-platform detection and configuration',
-      status: 'active',
-      lastUpdated: '2024-01-15T10:30:00Z'
-    },
-    {
-      id: 'ssl',
-      name: 'SSL Management',
-      version: '2.0.0',
-      description: 'SSL certificate generation and management',
-      status: 'active',
-      lastUpdated: '2024-01-15T10:30:00Z'
-    },
-    {
-      id: 'database',
-      name: 'Database Operations',
-      version: '2.0.0',
-      description: 'Database creation, management, and health checks',
-      status: 'active',
-      lastUpdated: '2024-01-15T10:30:00Z'
-    },
-    {
-      id: 'projects',
-      name: 'Project Management',
-      version: '2.0.0',
-      description: 'Framework-specific project creation and management',
-      status: 'active',
-      lastUpdated: '2024-01-15T10:30:00Z'
-    },
-    {
-      id: 'dependencies',
-      name: 'Dependency Manager',
-      version: '2.0.0',
-      description: 'Smart dependency detection and installation',
-      status: 'active',
-      lastUpdated: '2024-01-15T10:30:00Z'
-    },
-    {
-      id: 'sync',
-      name: 'Cloud Sync',
-      version: '2.0.0',
-      description: 'Configuration and SSL certificate cloud synchronization',
-      status: 'inactive',
-      lastUpdated: '2024-01-10T14:20:00Z'
-    }
-  ];
+  try {
+    console.log('Fetching modules...');
+    const result = await modulesService.getAllModules();
+    console.log('Modules fetched successfully:', result);
+    return result;
+  } catch (error) {
+    console.error('Error fetching modules:', error);
+    reply.code(500).send({ 
+      error: error.message,
+      details: 'Failed to fetch modules. Check server logs for more information.'
+    });
+  }
+});
 
-  return {
-    modules,
-    total: modules.length,
-    active: modules.filter(m => m.status === 'active').length,
-    inactive: modules.filter(m => m.status === 'inactive').length
-  };
+// Get specific module
+fastify.get('/api/modules/:id', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const module = await modulesService.getModuleById(id);
+    return module;
+  } catch (error) {
+    reply.code(404).send({ error: error.message });
+  }
+});
+
+// Enable module
+fastify.post('/api/modules/:id/enable', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const module = await modulesService.enableModule(id);
+    return { success: true, module };
+  } catch (error) {
+    reply.code(400).send({ error: error.message });
+  }
+});
+
+// Disable module
+fastify.post('/api/modules/:id/disable', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const module = await modulesService.disableModule(id);
+    return { success: true, module };
+  } catch (error) {
+    reply.code(400).send({ error: error.message });
+  }
+});
+
+// Get module health
+fastify.get('/api/modules/:id/health', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const health = await modulesService.getModuleHealth(id);
+    return health;
+  } catch (error) {
+    reply.code(404).send({ error: error.message });
+  }
+});
+
+// Get module logs
+fastify.get('/api/modules/:id/logs', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const { lines = 50 } = request.query;
+    const logs = await modulesService.getModuleLogs(id, parseInt(lines));
+    return { logs };
+  } catch (error) {
+    reply.code(404).send({ error: error.message });
+  }
+});
+
+// Test module
+fastify.post('/api/modules/:id/test', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const results = await modulesService.testModule(id);
+    return results;
+  } catch (error) {
+    reply.code(404).send({ error: error.message });
+  }
+});
+
+// Get module configuration
+fastify.get('/api/modules/:id/config', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const config = await modulesService.getModuleConfiguration(id);
+    return config;
+  } catch (error) {
+    reply.code(404).send({ error: error.message });
+  }
+});
+
+// Update module configuration
+fastify.post('/api/modules/:id/config', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const config = request.body;
+    console.log(`[CONFIG API] Updating config for module ${id}:`, config);
+    const result = await modulesService.updateModuleConfiguration(id, config);
+    console.log(`[CONFIG API] Config update result:`, result);
+    return result;
+  } catch (error) {
+    console.error(`[CONFIG API] Error updating config for module ${request.params.id}:`, error);
+    reply.code(400).send({ error: error.message });
+  }
+});
+
+// Get module metrics
+fastify.get('/api/modules/:id/metrics', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const metrics = await modulesService.getModuleMetrics(id);
+    return metrics;
+  } catch (error) {
+    reply.code(404).send({ error: error.message });
+  }
+});
+
+// Get all modules health
+fastify.get('/api/modules/health', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const health = await modulesService.getAllModulesHealth();
+    return health;
+  } catch (error) {
+    reply.code(500).send({ error: error.message });
+  }
+});
+
+// Get module alerts
+fastify.get('/api/modules/alerts', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const alerts = await modulesService.checkModuleAlerts();
+    return { alerts };
+  } catch (error) {
+    reply.code(500).send({ error: error.message });
+  }
+});
+
+// Install module dependencies
+fastify.post('/api/modules/:id/install-dependencies', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const result = await modulesService.installModuleDependencies(id);
+    return result;
+  } catch (error) {
+    reply.code(400).send({ error: error.message });
+  }
+});
+
+// Check module dependencies
+fastify.get('/api/modules/:id/dependencies', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const module = await modulesService.getModuleById(id);
+    return { dependencies: module.dependencyStatus };
+  } catch (error) {
+    reply.code(404).send({ error: error.message });
+  }
 });
 
 // Settings route
@@ -1430,14 +1543,7 @@ Directory: ${directory}`;
   }
 });
 
-// Health check route
-fastify.get('/api/health', async (request, reply) => {
-  return {
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  };
-});
+// Health check route (removed duplicate)
 
 // Helper function to format uptime
 function formatUptime(seconds) {

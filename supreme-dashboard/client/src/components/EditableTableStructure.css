@@ -6,15 +6,47 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  position: relative;
+  overflow: hidden;
+}
+
+.editable-structure .structure-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 50%, #ec4899 100%);
 }
 
 .editable-structure .structure-header h4 {
   margin: 0;
   color: #1f2937;
-  font-size: 1.25rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 2px 4px rgba(79, 70, 229, 0.1);
+  letter-spacing: -0.025em;
+  position: relative;
+}
+
+.editable-structure .structure-header h4::before {
+  content: '📋';
+  margin-right: 0.5rem;
+  font-size: 1.2rem;
+  -webkit-text-fill-color: initial;
+  background: none;
+  text-shadow: none;
 }
 
 .editable-structure .structure-actions {
@@ -151,12 +183,17 @@
 }
 
 .editable-structure .btn-primary {
-  background: #4f46e5;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
   color: white;
+  border: none;
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+  transition: all 0.2s ease;
 }
 
 .editable-structure .btn-primary:hover {
-  background: #4338ca;
+  background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(79, 70, 229, 0.3);
 }
 
 .editable-structure .btn-danger {

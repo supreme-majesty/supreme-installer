@@ -7,16 +7,25 @@ const Certificates = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const { token } = useAuth();
+  const { token, isAuthenticated } = useAuth();
 
   useEffect(() => {
     if (token) {
       fetchSslStatus();
+    } else {
+      setLoading(false);
+      setError('Authentication required. Please log in to view SSL status.');
     }
   }, [token]);
 
   const fetchSslStatus = async () => {
     try {
+      if (!token) {
+        setError('Authentication required. Please log in to view SSL status.');
+        setLoading(false);
+        return;
+      }
+
       const response = await fetch('/api/ssl/status', {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -26,12 +35,17 @@ const Certificates = () => {
       if (response.ok) {
         const data = await response.json();
         setSslStatus(data);
+      } else if (response.status === 401) {
+        setError('Authentication failed. Please log in again.');
+        // Clear invalid token
+        localStorage.removeItem('supreme_token');
+        window.location.reload();
       } else {
-        setError('Failed to fetch SSL status');
+        setError(`Failed to fetch SSL status (${response.status})`);
         console.error('Error fetching SSL status:', response.status);
       }
     } catch (error) {
-      setError('Failed to fetch SSL status');
+      setError('Network error. Please check your connection and try again.');
       console.error('Error fetching SSL status:', error);
     } finally {
       setLoading(false);
@@ -101,9 +115,19 @@ const Certificates = () => {
         <div className="error-icon">⚠️</div>
         <h3>Error Loading SSL Information</h3>
         <p>{error}</p>
-        <button onClick={fetchSslStatus} className="btn btn-primary">
-          Try Again
-        </button>
+        <div className="error-actions">
+          <button onClick={fetchSslStatus} className="btn btn-primary">
+            Try Again
+          </button>
+          {error.includes('Authentication') && (
+            <button 
+              onClick={() => window.location.href = '/login'} 
+              className="btn btn-secondary"
+            >
+              Go to Login
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -318,7 +342,7 @@ const Certificates = () => {
           
           <div className="help-item">
             <h4>🌐 Wildcard Certificates</h4>
-            <p>Wildcard certificates (*.{tld}) allow you to use HTTPS with any subdomain of your chosen TLD for local development.</p>
+            <p>Wildcard certificates (*.{sslStatus?.tld || 'test'}) allow you to use HTTPS with any subdomain of your chosen TLD for local development.</p>
           </div>
           
           <div className="help-item">

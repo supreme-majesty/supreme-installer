@@ -4,6 +4,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import InputModal from '../components/InputModal';
 import ConfirmModal from '../components/ConfirmModal';
 import TableCreationModal from '../components/TableCreationModal';
+import AddColumnModal from '../components/AddColumnModal';
 import EditableTableStructure from '../components/EditableTableStructure';
 import './Database.css';
 
@@ -22,6 +23,7 @@ const Database = () => {
   const [showCreateDbModal, setShowCreateDbModal] = useState(false);
   const [showDeleteDbModal, setShowDeleteDbModal] = useState(false);
   const [showCreateTableModal, setShowCreateTableModal] = useState(false);
+  const [showAddColumnModal, setShowAddColumnModal] = useState(false);
   const [dbToDelete, setDbToDelete] = useState(null);
   const [tableTemplates, setTableTemplates] = useState({});
 
@@ -295,9 +297,49 @@ const Database = () => {
   };
 
   const handleAddColumn = async (database, table) => {
-    // For now, we'll use the existing table creation modal
-    // In the future, we could create a dedicated "Add Column" modal
-    setShowCreateTableModal(true);
+    setShowAddColumnModal(true);
+  };
+
+  const addColumn = async (database, table, columnData) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Adding column:', { database, table, columnData });
+      
+      const response = await fetch(`/api/database/table/add-column`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          database,
+          table,
+          column: columnData
+        })
+      });
+      
+      console.log('Add column response status:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Add column success:', data);
+        // Refresh table structure
+        await getTableStructure(selectedTable);
+        return { success: true };
+      } else {
+        const data = await response.json();
+        console.error('Add column failed:', data);
+        setError(data.error || 'Failed to add column');
+        return { success: false, error: data.error };
+      }
+    } catch (error) {
+      setError('Network error: Failed to add column');
+      return { success: false, error: 'Network error' };
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchTableTemplates = async () => {
@@ -677,6 +719,15 @@ const Database = () => {
         onSubmit={createTable}
         database={selectedDb}
         templates={tableTemplates}
+      />
+
+      {/* Add Column Modal */}
+      <AddColumnModal
+        isOpen={showAddColumnModal}
+        onClose={() => setShowAddColumnModal(false)}
+        onSubmit={addColumn}
+        database={selectedDb}
+        table={selectedTable}
       />
     </div>
   );

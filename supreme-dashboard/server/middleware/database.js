@@ -755,8 +755,9 @@ export const addColumn = async (databaseName, tableName, columnData) => {
     
     console.log('Generated ADD COLUMN query:', alterQuery);
     
-    // Create a temporary connection to the specific database
+    // Use existing connection pool and switch to the specific database
     if (dbType === 'postgresql') {
+      // For PostgreSQL, we need to create a temporary connection to the specific database
       const tempPool = new Pool({
         ...dbConfig,
         database: databaseName
@@ -765,14 +766,9 @@ export const addColumn = async (databaseName, tableName, columnData) => {
       await tempPool.query(alterQuery);
       await tempPool.end();
     } else {
-      // For MySQL, create a temporary connection to the specific database
-      const tempPool = mysql.createPool({
-        ...dbConfig,
-        database: databaseName
-      });
-      
-      await tempPool.execute(alterQuery);
-      await tempPool.end();
+      // For MySQL, switch to the database and execute the query
+      await executeQuery(`USE \`${databaseName}\``);
+      await executeQuery(alterQuery);
     }
     
     return { 

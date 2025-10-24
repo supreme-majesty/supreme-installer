@@ -40,9 +40,16 @@ const EditableTableStructure = ({
       const updatedColumns = [...columns];
       const originalColumn = columns[rowIndex];
       
+      // Convert string values to appropriate types for specific fields
+      let processedValue = editValue;
+      if (field === 'nullable') {
+        processedValue = editValue === 'true';
+        console.log('EditableTableStructure: Converting nullable from string', editValue, 'to boolean', processedValue);
+      }
+      
       updatedColumns[rowIndex] = {
         ...updatedColumns[rowIndex],
-        [field]: editValue
+        [field]: processedValue
       };
       
       // Include original column name for name changes

@@ -12,7 +12,6 @@ class ModulesService {
     this.modulesPath = path.join(serverDir, 'supreme/modules');
     this.configPath = path.join(serverDir, 'supreme');
     this.modules = new Map();
-    this.initializeModules();
     
     // Log the paths for debugging
     console.log('Modules service initialized:');
@@ -20,85 +19,233 @@ class ModulesService {
     console.log('Config path:', this.configPath);
   }
 
-  initializeModules() {
-    // Define available modules with their metadata
-    this.modules.set('platform', {
-      id: 'platform',
-      name: 'Platform Detection',
-      version: '2.0.0',
-      description: 'Cross-platform detection and configuration',
-      file: 'platform.sh',
+  async initialize() {
+    await this.initializeModules();
+  }
+
+  async initializeModules() {
+    try {
+      console.log('Scanning for modules dynamically...');
+      await this.scanModulesDirectory();
+      console.log(`Found ${this.modules.size} modules`);
+    } catch (error) {
+      console.error('Error initializing modules:', error);
+      // Fallback to basic modules if scanning fails
+      this.initializeFallbackModules();
+    }
+  }
+
+  async scanModulesDirectory() {
+    try {
+      const files = await fs.readdir(this.modulesPath);
+      const moduleFiles = files.filter(file => file.endsWith('.sh'));
+      
+      for (const file of moduleFiles) {
+        const moduleId = file.replace('.sh', '');
+        const modulePath = path.join(this.modulesPath, file);
+        
+        try {
+          const moduleInfo = await this.extractModuleInfo(modulePath, moduleId);
+          this.modules.set(moduleId, moduleInfo);
+        } catch (error) {
+          console.warn(`Failed to extract info for module ${moduleId}:`, error.message);
+          // Add basic module info if extraction fails
+          this.modules.set(moduleId, this.createBasicModuleInfo(moduleId, file));
+        }
+      }
+    } catch (error) {
+      console.error('Error scanning modules directory:', error);
+      throw error;
+    }
+  }
+
+  async extractModuleInfo(modulePath, moduleId) {
+    try {
+      const content = await fs.readFile(modulePath, 'utf8');
+      const stats = await fs.stat(modulePath);
+      
+      // Extract module metadata from script comments
+      const moduleName = this.extractValue(content, 'MODULE_NAME') || this.formatModuleName(moduleId);
+      const moduleVersion = this.extractValue(content, 'MODULE_VERSION') || '1.0.0';
+      const moduleDescription = this.extractValue(content, 'MODULE_DESCRIPTION') || `Module for ${moduleName}`;
+      
+      // Extract dependencies from script content
+      const dependencies = this.extractDependencies(content);
+      
+      // Determine status based on file permissions and content
+      const status = this.determineModuleStatus(modulePath, content);
+      
+      // Check module health
+      const health = await this.checkModuleHealth(moduleId, modulePath);
+      
+      // Extract features from script content
+      const features = this.extractFeatures(content);
+      
+      return {
+        id: moduleId,
+        name: moduleName,
+        version: moduleVersion,
+        description: moduleDescription,
+        file: path.basename(modulePath),
+        dependencies,
+        status,
+        lastUpdated: stats.mtime.toISOString(),
+        health,
+        features
+      };
+    } catch (error) {
+      console.error(`Error extracting module info for ${moduleId}:`, error);
+      throw error;
+    }
+  }
+
+  extractValue(content, variableName) {
+    const regex = new RegExp(`${variableName}="([^"]*)"`);
+    const match = content.match(regex);
+    return match ? match[1] : null;
+  }
+
+  formatModuleName(moduleId) {
+    return moduleId
+      .split('-')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+
+  extractDependencies(content) {
+    const dependencies = [];
+    
+    // Look for common dependency patterns
+    const dependencyPatterns = [
+      /dependencies:\s*\[(.*?)\]/,
+      /DEPENDENCIES="([^"]*)"/,
+      /requires:\s*\[(.*?)\]/
+    ];
+    
+    for (const pattern of dependencyPatterns) {
+      const match = content.match(pattern);
+      if (match) {
+        const deps = match[1].split(',').map(dep => dep.trim().replace(/['"]/g, ''));
+        dependencies.push(...deps.filter(dep => dep && dep !== ''));
+      }
+    }
+    
+    // Also check for specific commands in the script
+    const commandDependencies = ['mysql', 'postgresql', 'composer', 'node', 'python3', 'git', 'whois', 'mkcert'];
+    for (const cmd of commandDependencies) {
+      if (content.includes(cmd) && !dependencies.includes(cmd)) {
+        dependencies.push(cmd);
+      }
+    }
+    
+    return [...new Set(dependencies)]; // Remove duplicates
+  }
+
+  determineModuleStatus(modulePath, content) {
+    // Check if file is executable
+    try {
+      const stats = fs.statSync(modulePath);
+      const isExecutable = !!(stats.mode & parseInt('111', 8));
+      
+      if (!isExecutable) {
+        return 'inactive';
+      }
+      
+      // Check for module initialization function
+      if (content.includes('init_') || content.includes('initialize') || content.includes('main')) {
+        return 'active';
+      }
+      
+      return 'active'; // Default to active if executable
+    } catch (error) {
+      return 'inactive';
+    }
+  }
+
+  async checkModuleHealth(moduleId, modulePath) {
+    try {
+      // Check if module file exists and is readable
+      await fs.access(modulePath, fs.constants.R_OK);
+      
+      // Try to run a basic health check if the module supports it
+      try {
+        const { stdout } = await execAsync(`bash "${modulePath}" health 2>/dev/null || echo "no_health_check"`);
+        if (stdout.includes('healthy')) {
+          return 'healthy';
+        } else if (stdout.includes('error')) {
+          return 'error';
+        }
+      } catch (error) {
+        // Module doesn't support health check, that's okay
+      }
+      
+      return 'healthy';
+    } catch (error) {
+      return 'error';
+    }
+  }
+
+  extractFeatures(content) {
+    const features = [];
+    
+    // Look for feature patterns in comments
+    const featurePatterns = [
+      /features:\s*\[(.*?)\]/,
+      /FEATURES="([^"]*)"/,
+      /# Features?: (.*)/g
+    ];
+    
+    for (const pattern of featurePatterns) {
+      const matches = content.match(pattern);
+      if (matches) {
+        const featureList = matches[1].split(',').map(f => f.trim().replace(/['"]/g, ''));
+        features.push(...featureList.filter(f => f && f !== ''));
+      }
+    }
+    
+    // If no explicit features found, generate some based on content
+    if (features.length === 0) {
+      if (content.includes('database') || content.includes('mysql') || content.includes('postgresql')) {
+        features.push('Database operations');
+      }
+      if (content.includes('ssl') || content.includes('certificate') || content.includes('mkcert')) {
+        features.push('SSL management');
+      }
+      if (content.includes('git') || content.includes('sync')) {
+        features.push('Version control');
+      }
+      if (content.includes('project') || content.includes('framework')) {
+        features.push('Project management');
+      }
+      if (content.includes('tld') || content.includes('domain')) {
+        features.push('Domain management');
+      }
+    }
+    
+    return features.length > 0 ? features : ['Module functionality'];
+  }
+
+  createBasicModuleInfo(moduleId, fileName) {
+    return {
+      id: moduleId,
+      name: this.formatModuleName(moduleId),
+      version: '1.0.0',
+      description: `Module for ${this.formatModuleName(moduleId)}`,
+      file: fileName,
       dependencies: [],
       status: 'active',
       lastUpdated: new Date().toISOString(),
       health: 'healthy',
-      features: ['Platform detection', 'Apache configuration', 'Database detection']
-    });
+      features: ['Module functionality']
+    };
+  }
 
-    this.modules.set('ssl', {
-      id: 'ssl',
-      name: 'SSL Management',
-      version: '2.0.0',
-      description: 'SSL certificate generation and management',
-      file: 'ssl.sh',
-      dependencies: ['mkcert'],
-      status: 'active',
-      lastUpdated: new Date().toISOString(),
-      health: 'healthy',
-      features: ['Certificate generation', 'Wildcard certificates', 'CA installation']
-    });
-
-    this.modules.set('database', {
-      id: 'database',
-      name: 'Database Operations',
-      version: '2.0.0',
-      description: 'Database creation, management, and health checks',
-      file: 'database.sh',
-      dependencies: ['mysql', 'postgresql'],
-      status: 'active',
-      lastUpdated: new Date().toISOString(),
-      health: 'healthy',
-      features: ['Database creation', 'Import/Export', 'Health checks']
-    });
-
-    this.modules.set('projects', {
-      id: 'projects',
-      name: 'Project Management',
-      version: '2.0.0',
-      description: 'Framework-specific project creation and management',
-      file: 'projects.sh',
-      dependencies: ['composer', 'node', 'python3'],
-      status: 'active',
-      lastUpdated: new Date().toISOString(),
-      health: 'healthy',
-      features: ['Laravel projects', 'React/Vue/Angular', 'Django/Flask', 'WordPress']
-    });
-
-    this.modules.set('dependencies', {
-      id: 'dependencies',
-      name: 'Dependency Manager',
-      version: '2.0.0',
-      description: 'Smart dependency detection and installation',
-      file: 'dependencies.sh',
-      dependencies: [],
-      status: 'active',
-      lastUpdated: new Date().toISOString(),
-      health: 'healthy',
-      features: ['XAMPP detection', 'Package management', 'Auto-installation']
-    });
-
-    this.modules.set('sync', {
-      id: 'sync',
-      name: 'Cloud Sync',
-      version: '2.0.0',
-      description: 'Configuration and SSL certificate cloud synchronization',
-      file: 'sync.sh',
-      dependencies: ['git'],
-      status: 'inactive',
-      lastUpdated: new Date().toISOString(),
-      health: 'unknown',
-      features: ['GitHub sync', 'GitLab sync', 'Encrypted storage']
-    });
+  initializeFallbackModules() {
+    console.log('Initializing fallback modules...');
+    // Keep some essential modules as fallback
+    this.modules.set('platform', this.createBasicModuleInfo('platform', 'platform.sh'));
+    this.modules.set('ssl', this.createBasicModuleInfo('ssl', 'ssl.sh'));
+    this.modules.set('database', this.createBasicModuleInfo('database', 'database.sh'));
   }
 
   async getAllModules() {

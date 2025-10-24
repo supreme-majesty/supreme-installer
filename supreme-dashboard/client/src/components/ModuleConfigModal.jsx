@@ -15,7 +15,8 @@ const ModuleConfigModal = ({ isOpen, onClose, module, onSave }) => {
         database: { defaultType: 'mysql', autoBackup: true, backupRetention: 30 },
         projects: { defaultFramework: 'laravel', autoCreateDatabase: true, enableSSL: true },
         dependencies: { autoInstall: true, preferXAMPP: true, checkUpdates: true },
-        sync: { backend: 'none', encryption: true, autoSync: false }
+        sync: { backend: 'none', encryption: true, autoSync: false },
+        tld: { defaultTld: 'local', customTlds: '', validateTld: true, checkDomainAvailability: false }
       };
       
       setConfig(module.configuration || defaultConfig[module.id] || {});
@@ -241,6 +242,55 @@ const ModuleConfigModal = ({ isOpen, onClose, module, onSave }) => {
                     onChange={e => handleInputChange('checkUpdates', e.target.checked)}
                   />
                   Check for dependency updates
+                </label>
+              </div>
+            </div>
+          )}
+
+          {module?.id === 'tld' && (
+            <div className="config-section">
+              <h4>TLD Management Settings</h4>
+              <div className="form-group">
+                <label>Default TLD:</label>
+                <select
+                  value={config.defaultTld || 'local'}
+                  onChange={e => handleInputChange('defaultTld', e.target.value)}
+                >
+                  <option value="local">.local</option>
+                  <option value="dev">.dev</option>
+                  <option value="test">.test</option>
+                  <option value="com">.com</option>
+                  <option value="org">.org</option>
+                  <option value="net">.net</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Custom TLDs:</label>
+                <input
+                  type="text"
+                  value={config.customTlds || ''}
+                  onChange={e => handleInputChange('customTlds', e.target.value)}
+                  placeholder="e.g., .custom, .internal"
+                />
+              </div>
+              <div className="form-group">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={config.validateTld || true}
+                    onChange={e => handleInputChange('validateTld', e.target.checked)}
+                  />
+                  Validate TLD format
+                </label>
+              </div>
+              <div className="form-group">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={config.checkDomainAvailability || false}
+                    onChange={e => handleInputChange('checkDomainAvailability', e.target.checked)}
+                  />
+                  Check domain availability
                 </label>
               </div>
             </div>

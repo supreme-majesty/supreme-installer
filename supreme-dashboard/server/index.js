@@ -1569,6 +1569,11 @@ const start = async () => {
     const port = process.env.PORT || 5000;
     const host = process.env.HOST || '0.0.0.0';
     
+    // Initialize modules service
+    console.log('Initializing modules service...');
+    await modulesService.initialize();
+    console.log('Modules service initialized successfully');
+    
     await fastify.listen({ port, host });
     console.log(`🚀 Supreme Dashboard Server running on http://${host}:${port}`);
     console.log(`📊 API available at http://${host}:${port}/api`);

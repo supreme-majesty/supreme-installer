@@ -143,6 +143,17 @@ body::before {
   transform: translateY(-1px);
 }
 
+.btn-danger {
+  background: transparent !important;
+  color: #ff0000 !important;
+  border: none !important;
+}
+
+.btn-danger:hover {
+  background: #ff0000 !important;
+  color: white !important;
+}
+
 /* Input Styles */
 .input {
   width: 100%;

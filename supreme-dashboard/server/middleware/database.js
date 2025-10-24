@@ -577,6 +577,11 @@ export const updateColumn = async (databaseName, tableName, columnData) => {
     
     const { name, type, nullable, key, default: defaultValue, extra, originalName } = columnData;
     
+    // Get the original column data to check if key type changed
+    const originalColumn = await getTableStructure(databaseName, tableName);
+    const originalColumnData = originalColumn.columns.find(col => col.name === (originalName || name));
+    const originalKey = originalColumnData ? originalColumnData.key : '';
+    
     // Check if column name has changed
     const nameChanged = originalName && originalName !== name;
     
@@ -632,6 +637,36 @@ export const updateColumn = async (databaseName, tableName, columnData) => {
       const alterQuery = `ALTER TABLE \`${tableName}\` MODIFY COLUMN ${columnDef}`;
       console.log('Generated ALTER query:', alterQuery);
       await executeQuery(alterQuery);
+    }
+    
+    // Handle UNIQUE constraint changes
+    if (originalKey !== key) {
+      console.log(`Key type changed from '${originalKey}' to '${key}' for column '${name}'`);
+      
+      // Remove existing UNIQUE constraint if it exists
+      if (originalKey === 'UNI') {
+        try {
+          // Get the unique index name
+          const indexQuery = `SHOW INDEX FROM \`${tableName}\` WHERE Column_name = '${originalName || name}' AND Non_unique = 0`;
+          const indexes = await executeQuery(indexQuery);
+          
+          if (indexes.length > 0) {
+            const indexName = indexes[0].Key_name;
+            const dropIndexQuery = `ALTER TABLE \`${tableName}\` DROP INDEX \`${indexName}\``;
+            console.log('Dropping unique index:', dropIndexQuery);
+            await executeQuery(dropIndexQuery);
+          }
+        } catch (error) {
+          console.log('No unique index to drop or error dropping:', error.message);
+        }
+      }
+      
+      // Add UNIQUE constraint if requested
+      if (key === 'UNI') {
+        const addUniqueQuery = `ALTER TABLE \`${tableName}\` ADD UNIQUE (\`${name}\`)`;
+        console.log('Adding unique constraint:', addUniqueQuery);
+        await executeQuery(addUniqueQuery);
+      }
     }
     
     return { 
@@ -770,6 +805,13 @@ export const addColumn = async (databaseName, tableName, columnData) => {
       // Use query() instead of execute() for USE statement (not supported in prepared statements)
       await connectionPool.query(`USE \`${databaseName}\``);
       await executeQuery(alterQuery);
+      
+      // Add UNIQUE constraint if requested
+      if (key === 'UNI') {
+        const addUniqueQuery = `ALTER TABLE \`${tableName}\` ADD UNIQUE (\`${name}\`)`;
+        console.log('Adding unique constraint to new column:', addUniqueQuery);
+        await executeQuery(addUniqueQuery);
+      }
     }
     
     return { 
@@ -785,6 +827,115 @@ export const addColumn = async (databaseName, tableName, columnData) => {
       errorMessage: error.message,
       errorCode: error.code
     });
+    throw error;
+  }
+};
+
+// Search database for specific content
+export const searchDatabase = async (databaseName, searchQuery, filters = {}) => {
+  try {
+    console.log('searchDatabase called with:', { databaseName, searchQuery, filters });
+    
+    if (!dbType || !dbConfig) {
+      throw new Error('Database not properly initialized');
+    }
+    
+    const startTime = Date.now();
+    const results = [];
+    
+    // Use the existing connection pool and select database first
+    await connectionPool.query(`USE \`${databaseName}\``);
+    
+    // Get all tables in the database
+    const tables = await getTables(databaseName);
+    
+    for (const table of tables) {
+      try {
+        // Get table structure to understand column types
+        const structure = await getTableStructure(databaseName, table.name);
+        
+        // Search in table names if requested
+        if (filters.searchIn === 'all' || filters.searchIn === 'tables') {
+          if (table.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+            results.push({
+              table: table.name,
+              column: 'table_name',
+              type: 'table',
+              row: 0,
+              value: table.name,
+              context: 'Table name match'
+            });
+          }
+        }
+        
+        // Search in data if requested
+        if (filters.searchIn === 'all' || filters.searchIn === 'data') {
+          // Get sample data from the table (limit to first 100 rows for performance)
+          const sampleQuery = `SELECT * FROM \`${table.name}\` LIMIT 100`;
+          const sampleData = await executeQuery(sampleQuery);
+          
+          // Search through each row and column
+          for (let rowIndex = 0; rowIndex < sampleData.length; rowIndex++) {
+            const row = sampleData[rowIndex];
+            
+            for (const [columnName, value] of Object.entries(row)) {
+              if (value === null || value === undefined) continue;
+              
+              const stringValue = String(value);
+              const searchTerm = filters.caseSensitive ? searchQuery : searchQuery.toLowerCase();
+              const searchValue = filters.caseSensitive ? stringValue : stringValue.toLowerCase();
+              
+              if (searchValue.includes(searchTerm)) {
+                // Check data type filter
+                const columnInfo = structure.columns.find(col => col.name === columnName);
+                const columnType = columnInfo ? columnInfo.type.toLowerCase() : 'unknown';
+                
+                let matchesFilter = true;
+                if (filters.dataType !== 'all') {
+                  switch (filters.dataType) {
+                    case 'text':
+                      matchesFilter = columnType.includes('varchar') || columnType.includes('text') || columnType.includes('char');
+                      break;
+                    case 'number':
+                      matchesFilter = columnType.includes('int') || columnType.includes('decimal') || columnType.includes('float');
+                      break;
+                    case 'date':
+                      matchesFilter = columnType.includes('date') || columnType.includes('time');
+                      break;
+                  }
+                }
+                
+                if (matchesFilter) {
+                  results.push({
+                    table: table.name,
+                    column: columnName,
+                    type: columnType,
+                    row: rowIndex + 1,
+                    value: stringValue,
+                    context: `Found in ${table.name}.${columnName}`
+                  });
+                }
+              }
+            }
+          }
+        }
+      } catch (tableError) {
+        console.log(`Error searching table ${table.name}:`, tableError.message);
+        // Continue with other tables
+      }
+    }
+    
+    const executionTime = Date.now() - startTime;
+    
+    return {
+      success: true,
+      results: results.slice(0, 100), // Limit to 100 results for performance
+      totalResults: results.length,
+      executionTime,
+      message: `Found ${results.length} results in ${executionTime}ms`
+    };
+  } catch (error) {
+    console.error('Error searching database:', error);
     throw error;
   }
 };

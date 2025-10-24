@@ -26,6 +26,17 @@ const Database = () => {
   const [showAddColumnModal, setShowAddColumnModal] = useState(false);
   const [dbToDelete, setDbToDelete] = useState(null);
   const [tableTemplates, setTableTemplates] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchFilters, setSearchFilters] = useState({
+    searchIn: 'all', // all, tables, data
+    dataType: 'all', // all, text, number, date
+    caseSensitive: false
+  });
+  const [inlineSearchQuery, setInlineSearchQuery] = useState('');
+  const [filteredDatabases, setFilteredDatabases] = useState([]);
+  const [filteredTables, setFilteredTables] = useState([]);
 
   useEffect(() => {
     if (token) {
@@ -33,6 +44,12 @@ const Database = () => {
       fetchTableTemplates();
     }
   }, [token]);
+
+  // Initialize filtered states
+  useEffect(() => {
+    setFilteredDatabases(databases);
+    setFilteredTables(tables);
+  }, [databases, tables]);
 
   useEffect(() => {
     if (selectedDb && selectedTable && activeTab === 'structure') {
@@ -342,6 +359,67 @@ const Database = () => {
     }
   };
 
+  const performSearch = async () => {
+    if (!searchQuery.trim() || !selectedDb) {
+      setError('Please enter a search query and select a database');
+      return;
+    }
+
+    try {
+      setSearchLoading(true);
+      setError(null);
+      
+      const response = await fetch('/api/database/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          database: selectedDb,
+          query: searchQuery.trim(),
+          filters: searchFilters
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSearchResults(data);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Search failed');
+      }
+    } catch (error) {
+      setError('Network error: Search failed');
+      console.error('Search error:', error);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // Filter databases and tables based on search query
+  useEffect(() => {
+    if (!inlineSearchQuery.trim()) {
+      setFilteredDatabases(databases || []);
+      setFilteredTables(tables || []);
+      return;
+    }
+
+    const query = inlineSearchQuery.toLowerCase();
+    
+    // Filter databases
+    const filteredDbs = (databases || []).filter(db => 
+      db.name && db.name.toLowerCase().includes(query)
+    );
+    setFilteredDatabases(filteredDbs);
+    
+    // Filter tables
+    const filteredTbls = (tables || []).filter(table => 
+      table.name && table.name.toLowerCase().includes(query)
+    );
+    setFilteredTables(filteredTbls);
+  }, [inlineSearchQuery, databases, tables]);
+
   const fetchTableTemplates = async () => {
     try {
       const response = await fetch('/api/database/table/templates', {
@@ -398,7 +476,8 @@ const Database = () => {
   const tabs = [
     { id: 'browser', label: 'Database Browser', icon: '🗂️' },
     { id: 'query', label: 'SQL Query', icon: '💻' },
-    { id: 'structure', label: 'Table Structure', icon: '📊' }
+    { id: 'structure', label: 'Table Structure', icon: '📊' },
+    { id: 'search', label: 'Search', icon: '🔍' }
   ];
 
   return (
@@ -444,24 +523,35 @@ const Database = () => {
                 <div className="dashboard-card">
                   <div className="section-header">
                     <h3>Databases</h3>
-                    <button 
-                      className="btn btn-primary btn-sm"
-                      onClick={() => setShowCreateDbModal(true)}
-                    >
-                      + New
-                    </button>
+                    <div className="section-actions">
+                      <div className="inline-search">
+                        <input
+                          type="text"
+                          value={inlineSearchQuery}
+                          onChange={(e) => setInlineSearchQuery(e.target.value)}
+                          placeholder="Search databases..."
+                          className="form-input search-input-inline"
+                        />
+                      </div>
+                      <button 
+                        className="btn btn-primary btn-sm"
+                        onClick={() => setShowCreateDbModal(true)}
+                      >
+                        + New
+                      </button>
+                    </div>
                   </div>
                   
                   <div className="database-list">
                     {loading ? (
                       <LoadingSpinner size="small" text="Loading databases..." />
-                    ) : databases.length === 0 ? (
+                    ) : filteredDatabases.length === 0 ? (
                       <div className="empty-state">
                         <div className="empty-icon">🗄️</div>
-                        <p>No databases found</p>
+                        <p>{inlineSearchQuery.trim() ? `No databases found matching "${inlineSearchQuery}"` : 'No databases found'}</p>
                       </div>
                     ) : (
-                      databases.map(db => (
+                      filteredDatabases.map(db => (
                         <div 
                           key={db.name} 
                           className={`database-item ${selectedDb === db.name ? 'selected' : ''}`}
@@ -523,13 +613,13 @@ const Database = () => {
                       </div>
                     ) : loading ? (
                       <LoadingSpinner size="small" text="Loading tables..." />
-                    ) : tables.length === 0 ? (
+                    ) : filteredTables.length === 0 ? (
                       <div className="empty-state">
                         <div className="empty-icon">📋</div>
-                        <p>No tables found</p>
+                        <p>{inlineSearchQuery.trim() ? `No tables found matching "${inlineSearchQuery}"` : 'No tables found'}</p>
                       </div>
                     ) : (
-                      tables.map(table => (
+                      filteredTables.map(table => (
                         <div 
                           key={table.name} 
                           className={`table-item ${selectedTable === table.name ? 'selected' : ''}`}
@@ -680,6 +770,131 @@ const Database = () => {
                 <div className="empty-state">
                   <div className="empty-icon">⚠️</div>
                   <p>Failed to load table structure</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Search Tab */}
+        {activeTab === 'search' && (
+          <div className="search-section">
+            <div className="dashboard-card">
+              <div className="search-header">
+                <h3>Database Search</h3>
+                <div className="search-controls">
+                  <select 
+                    value={selectedDb} 
+                    onChange={(e) => setSelectedDb(e.target.value)}
+                    className="form-input"
+                    style={{ width: '200px' }}
+                  >
+                    <option value="">Select Database</option>
+                    {databases.map(db => (
+                      <option key={db.name} value={db.name}>{db.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="search-form">
+                <div className="search-input-group">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Enter search term..."
+                    className="form-input search-input"
+                    onKeyPress={(e) => e.key === 'Enter' && performSearch()}
+                  />
+                  <button 
+                    className="btn btn-primary"
+                    onClick={performSearch}
+                    disabled={!searchQuery.trim() || !selectedDb || searchLoading}
+                  >
+                    {searchLoading ? <LoadingSpinner size="small" text="" /> : '🔍 Search'}
+                  </button>
+                </div>
+
+                <div className="search-filters">
+                  <div className="filter-group">
+                    <label>Search In:</label>
+                    <select
+                      value={searchFilters.searchIn}
+                      onChange={(e) => setSearchFilters({...searchFilters, searchIn: e.target.value})}
+                      className="form-input"
+                    >
+                      <option value="all">All Tables & Data</option>
+                      <option value="tables">Table Names Only</option>
+                      <option value="data">Data Content Only</option>
+                    </select>
+                  </div>
+                  
+                  <div className="filter-group">
+                    <label>Data Type:</label>
+                    <select
+                      value={searchFilters.dataType}
+                      onChange={(e) => setSearchFilters({...searchFilters, dataType: e.target.value})}
+                      className="form-input"
+                    >
+                      <option value="all">All Types</option>
+                      <option value="text">Text Fields</option>
+                      <option value="number">Numbers</option>
+                      <option value="date">Dates</option>
+                    </select>
+                  </div>
+                  
+                  <div className="filter-group">
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={searchFilters.caseSensitive}
+                        onChange={(e) => setSearchFilters({...searchFilters, caseSensitive: e.target.checked})}
+                      />
+                      Case Sensitive
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {searchResults && (
+                <div className="search-results">
+                  <div className="results-header">
+                    <h4>Search Results</h4>
+                    <div className="results-info">
+                      <span>Found {searchResults.totalResults || 0} results</span>
+                      <span>Execution time: {searchResults.executionTime || 0}ms</span>
+                    </div>
+                  </div>
+                  
+                  {searchResults.results && searchResults.results.length > 0 ? (
+                    <div className="results-list">
+                      {searchResults.results.map((result, index) => (
+                        <div key={index} className="result-item">
+                          <div className="result-header">
+                            <span className="result-table">{result.table}</span>
+                            <span className="result-column">{result.column}</span>
+                            <span className="result-type">{result.type}</span>
+                          </div>
+                          <div className="result-content">
+                            <div className="result-row">
+                              <strong>Row {result.row}:</strong> {result.value}
+                            </div>
+                            {result.context && (
+                              <div className="result-context">
+                                <small>Context: {result.context}</small>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="no-results">
+                      <div className="empty-icon">🔍</div>
+                      <p>No results found for "{searchQuery}"</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

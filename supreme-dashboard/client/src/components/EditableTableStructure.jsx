@@ -211,6 +211,37 @@ const EditableTableStructure = ({
     );
   };
 
+  const renderKeyCell = (rowIndex, column) => {
+    const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.field === 'key';
+    
+    if (isEditing) {
+      return (
+        <select
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyPress={handleCellKeyPress}
+          onBlur={handleSave}
+          className="edit-select"
+          autoFocus
+        >
+          <option value="">None</option>
+          <option value="PRI">Primary Key</option>
+          <option value="UNI">Unique Key</option>
+          <option value="MUL">Foreign Key</option>
+        </select>
+      );
+    }
+    
+    return (
+      <span 
+        className="editable-cell"
+        onDoubleClick={() => handleCellDoubleClick(rowIndex, 'key', column.key || '')}
+      >
+        {column.key || '-'}
+      </span>
+    );
+  };
+
 
   if (!tableStructure?.columns) {
     return (
@@ -261,7 +292,7 @@ const EditableTableStructure = ({
                   {renderNullableCell(index, column)}
                 </td>
                 <td>
-                  {renderCell(index, 'key', column.key)}
+                  {renderKeyCell(index, column)}
                 </td>
                 <td>
                   {renderCell(index, 'default', column.default)}

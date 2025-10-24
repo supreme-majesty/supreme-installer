@@ -24,7 +24,8 @@ import {
   testConnection,
   updateColumn,
   deleteColumn,
-  addColumn
+  addColumn,
+  searchDatabase
 } from './middleware/database.js';
 
 const execAsync = promisify(exec);
@@ -1133,6 +1134,33 @@ fastify.post('/api/database/table/add-column', { preHandler: [authenticateToken,
   } catch (error) {
     console.error('Error adding column:', error);
     return reply.code(500).send({ error: 'Failed to add column' });
+  }
+});
+
+// Database search endpoint
+fastify.post('/api/database/search', { preHandler: [authenticateToken, requireRole(['admin'])] }, async (request, reply) => {
+  try {
+    const { database, query, filters } = request.body;
+    
+    if (!database || !query) {
+      return reply.code(400).send({ error: 'Database name and search query are required' });
+    }
+    
+    if (!dbInitialized) {
+      return {
+        success: true,
+        results: [],
+        totalResults: 0,
+        executionTime: 0,
+        mock: true
+      };
+    }
+    
+    const result = await searchDatabase(database, query, filters);
+    return { ...result, mock: false };
+  } catch (error) {
+    console.error('Error searching database:', error);
+    return reply.code(500).send({ error: 'Failed to search database' });
   }
 });
 

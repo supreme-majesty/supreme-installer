@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import staticFiles from '@fastify/static';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -772,8 +772,21 @@ fastify.post('/api/database/create', { preHandler: [authenticateToken, requireRo
   try {
     const { name } = request.body;
     
-    if (!name || !/^[a-zA-Z][a-zA-Z0-9_]*$/.test(name)) {
-      return reply.code(400).send({ error: 'Invalid database name' });
+    if (!name) {
+      return reply.code(400).send({ error: 'Database name is required' });
+    }
+    
+    // Enhanced validation for database names
+    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(name)) {
+      return reply.code(400).send({ 
+        error: 'Invalid database name. Must start with a letter and contain only letters, numbers, and underscores (max 64 characters)' 
+      });
+    }
+    
+    // Check for reserved names
+    const reservedNames = ['mysql', 'information_schema', 'performance_schema', 'sys', 'test'];
+    if (reservedNames.includes(name.toLowerCase())) {
+      return reply.code(400).send({ error: 'Database name is reserved' });
     }
     
     if (!dbInitialized) {
@@ -795,6 +808,23 @@ fastify.post('/api/database/create', { preHandler: [authenticateToken, requireRo
 fastify.delete('/api/database/delete/:name', { preHandler: [authenticateToken, requireRole(['admin'])] }, async (request, reply) => {
   try {
     const { name } = request.params;
+    
+    if (!name) {
+      return reply.code(400).send({ error: 'Database name is required' });
+    }
+    
+    // Enhanced validation for database names
+    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(name)) {
+      return reply.code(400).send({ 
+        error: 'Invalid database name. Must start with a letter and contain only letters, numbers, and underscores (max 64 characters)' 
+      });
+    }
+    
+    // Check for reserved names
+    const reservedNames = ['mysql', 'information_schema', 'performance_schema', 'sys', 'test'];
+    if (reservedNames.includes(name.toLowerCase())) {
+      return reply.code(400).send({ error: 'Cannot delete reserved database' });
+    }
     
     if (!dbInitialized) {
       return {
@@ -840,40 +870,66 @@ fastify.get('/api/files', { preHandler: authenticateToken }, async (request, rep
       return reply.code(400).send({ error: 'Path parameter is required' });
     }
     
-    // Mock file list - In production, use fs.readdir
-    const files = [
-      {
-        name: 'index.html',
-        path: `${path}/index.html`,
-        isDirectory: false,
-        size: 1024,
-        modified: new Date('2024-01-15T10:30:00Z')
-      },
-      {
-        name: 'styles',
-        path: `${path}/styles`,
-        isDirectory: true,
-        size: 0,
-        modified: new Date('2024-01-15T10:30:00Z')
-      },
-      {
-        name: 'scripts',
-        path: `${path}/scripts`,
-        isDirectory: true,
-        size: 0,
-        modified: new Date('2024-01-15T10:30:00Z')
-      },
-      {
-        name: 'package.json',
-        path: `${path}/package.json`,
-        isDirectory: false,
-        size: 512,
-        modified: new Date('2024-01-15T10:30:00Z')
-      }
+    // Security: Validate path to prevent directory traversal
+    const normalizedPath = resolve(path);
+    
+    // More flexible allowed paths - include common web directories and user home
+    const allowedPaths = [
+      '/home/supreme-majesty',
+      '/home',
+      '/var/www/html',
+      '/opt/lampp/htdocs', 
+      process.cwd(),
+      '/var/www',
+      '/usr/local/www',
+      '/srv/www'
     ];
     
+    const isAllowed = allowedPaths.some(allowedPath => 
+      normalizedPath.startsWith(resolve(allowedPath))
+    );
+    
+    if (!isAllowed) {
+      console.log(`Access denied for path: ${normalizedPath}`);
+      console.log(`Allowed paths: ${allowedPaths.join(', ')}`);
+      return reply.code(403).send({ 
+        error: `Access denied: Path not allowed. Allowed paths: ${allowedPaths.join(', ')}` 
+      });
+    }
+    
+    if (!existsSync(normalizedPath)) {
+      console.log(`Directory not found: ${normalizedPath}`);
+      return reply.code(404).send({ error: 'Directory not found' });
+    }
+    
+    const stats = statSync(normalizedPath);
+    if (!stats.isDirectory()) {
+      return reply.code(400).send({ error: 'Path is not a directory' });
+    }
+    
+    const files = readdirSync(normalizedPath, { withFileTypes: true })
+      .map(dirent => {
+        const fullPath = join(normalizedPath, dirent.name);
+        const fileStats = statSync(fullPath);
+        return {
+          name: dirent.name,
+          path: fullPath,
+          isDirectory: dirent.isDirectory(),
+          size: fileStats.size,
+          modified: fileStats.mtime
+        };
+      })
+      .sort((a, b) => {
+        // Directories first, then files
+        if (a.isDirectory && !b.isDirectory) return -1;
+        if (!a.isDirectory && b.isDirectory) return 1;
+        return a.name.localeCompare(b.name);
+      });
+    
+    console.log(`Successfully fetched ${files.length} files from ${normalizedPath}`);
     return { files };
   } catch (error) {
+    console.error('Error fetching files:', error);
     return reply.code(500).send({ error: 'Failed to fetch files' });
   }
 });
@@ -886,18 +942,45 @@ fastify.get('/api/files/content', { preHandler: authenticateToken }, async (requ
       return reply.code(400).send({ error: 'Path parameter is required' });
     }
     
-    // Mock file content - In production, use fs.readFile
-    const content = `// Mock file content for ${path}
-console.log('Hello, World!');
-
-function example() {
-  return 'This is a sample file';
-}
-
-export default example;`;
+    // Security: Validate path to prevent directory traversal
+    const { resolve } = await import('path');
+    const normalizedPath = resolve(path);
+    const allowedPaths = [
+      '/home/supreme-majesty',
+      '/home',
+      '/var/www/html',
+      '/opt/lampp/htdocs', 
+      process.cwd(),
+      '/var/www',
+      '/usr/local/www',
+      '/srv/www'
+    ];
+    const isAllowed = allowedPaths.some(allowedPath => 
+      normalizedPath.startsWith(resolve(allowedPath))
+    );
     
+    if (!isAllowed) {
+      return reply.code(403).send({ error: 'Access denied: Path not allowed' });
+    }
+    
+    if (!existsSync(normalizedPath)) {
+      return reply.code(404).send({ error: 'File not found' });
+    }
+    
+    const stats = statSync(normalizedPath);
+    if (stats.isDirectory()) {
+      return reply.code(400).send({ error: 'Path is a directory, not a file' });
+    }
+    
+    // Check file size to prevent loading huge files
+    if (stats.size > 10 * 1024 * 1024) { // 10MB limit
+      return reply.code(413).send({ error: 'File too large to display' });
+    }
+    
+    const content = readFileSync(normalizedPath, 'utf8');
     return { content };
   } catch (error) {
+    console.error('Error fetching file content:', error);
     return reply.code(500).send({ error: 'Failed to fetch file content' });
   }
 });
@@ -910,12 +993,44 @@ fastify.post('/api/files/save', { preHandler: authenticateToken }, async (reques
       return reply.code(400).send({ error: 'Path and content are required' });
     }
     
-    // Mock file save - In production, use fs.writeFile
+    // Security: Validate path to prevent directory traversal
+    const { resolve } = await import('path');
+    const normalizedPath = resolve(path);
+    const allowedPaths = [
+      '/home/supreme-majesty',
+      '/home',
+      '/var/www/html',
+      '/opt/lampp/htdocs', 
+      process.cwd(),
+      '/var/www',
+      '/usr/local/www',
+      '/srv/www'
+    ];
+    const isAllowed = allowedPaths.some(allowedPath => 
+      normalizedPath.startsWith(resolve(allowedPath))
+    );
+    
+    if (!isAllowed) {
+      return reply.code(403).send({ error: 'Access denied: Path not allowed' });
+    }
+    
+    // Check if parent directory exists
+    const { dirname } = await import('path');
+    const parentDir = dirname(normalizedPath);
+    if (!existsSync(parentDir)) {
+      return reply.code(400).send({ error: 'Parent directory does not exist' });
+    }
+    
+    // Write file content
+    const { writeFileSync } = await import('fs');
+    writeFileSync(normalizedPath, content, 'utf8');
+    
     return {
       success: true,
       message: 'File saved successfully'
     };
   } catch (error) {
+    console.error('Error saving file:', error);
     return reply.code(500).send({ error: 'Failed to save file' });
   }
 });
@@ -928,12 +1043,58 @@ fastify.post('/api/files/create', { preHandler: authenticateToken }, async (requ
       return reply.code(400).send({ error: 'Path and name are required' });
     }
     
-    // Mock file/folder creation - In production, use fs.mkdir or fs.writeFile
+    // Validate name to prevent security issues
+    if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
+      return reply.code(400).send({ error: 'Invalid name: Only alphanumeric characters, dots, underscores, and hyphens are allowed' });
+    }
+    
+    // Security: Validate path to prevent directory traversal
+    const { resolve } = await import('path');
+    const normalizedPath = resolve(path);
+    const allowedPaths = [
+      '/home/supreme-majesty',
+      '/home',
+      '/var/www/html',
+      '/opt/lampp/htdocs', 
+      process.cwd(),
+      '/var/www',
+      '/usr/local/www',
+      '/srv/www'
+    ];
+    const isAllowed = allowedPaths.some(allowedPath => 
+      normalizedPath.startsWith(resolve(allowedPath))
+    );
+    
+    if (!isAllowed) {
+      return reply.code(403).send({ error: 'Access denied: Path not allowed' });
+    }
+    
+    if (!existsSync(normalizedPath)) {
+      return reply.code(400).send({ error: 'Parent directory does not exist' });
+    }
+    
+    const { join } = await import('path');
+    const fullPath = join(normalizedPath, name);
+    
+    // Check if file/folder already exists
+    if (existsSync(fullPath)) {
+      return reply.code(409).send({ error: `${isDirectory ? 'Folder' : 'File'} already exists` });
+    }
+    
+    const { mkdirSync, writeFileSync } = await import('fs');
+    
+    if (isDirectory) {
+      mkdirSync(fullPath, { recursive: true });
+    } else {
+      writeFileSync(fullPath, '', 'utf8');
+    }
+    
     return {
       success: true,
       message: `${isDirectory ? 'Folder' : 'File'} created successfully`
     };
   } catch (error) {
+    console.error('Error creating file/folder:', error);
     return reply.code(500).send({ error: 'Failed to create file/folder' });
   }
 });
@@ -946,12 +1107,51 @@ fastify.delete('/api/files/delete', { preHandler: authenticateToken }, async (re
       return reply.code(400).send({ error: 'Path is required' });
     }
     
-    // Mock file deletion - In production, use fs.unlink or fs.rmdir
+    // Security: Validate path to prevent directory traversal
+    const { resolve } = await import('path');
+    const normalizedPath = resolve(path);
+    const allowedPaths = [
+      '/home/supreme-majesty',
+      '/home',
+      '/var/www/html',
+      '/opt/lampp/htdocs', 
+      process.cwd(),
+      '/var/www',
+      '/usr/local/www',
+      '/srv/www'
+    ];
+    const isAllowed = allowedPaths.some(allowedPath => 
+      normalizedPath.startsWith(resolve(allowedPath))
+    );
+    
+    if (!isAllowed) {
+      return reply.code(403).send({ error: 'Access denied: Path not allowed' });
+    }
+    
+    if (!existsSync(normalizedPath)) {
+      return reply.code(404).send({ error: 'File/folder not found' });
+    }
+    
+    const stats = statSync(normalizedPath);
+    const { unlinkSync, rmdirSync } = await import('fs');
+    
+    if (stats.isDirectory()) {
+      // Check if directory is empty
+      const files = readdirSync(normalizedPath);
+      if (files.length > 0) {
+        return reply.code(400).send({ error: 'Directory is not empty' });
+      }
+      rmdirSync(normalizedPath);
+    } else {
+      unlinkSync(normalizedPath);
+    }
+    
     return {
       success: true,
       message: 'File/folder deleted successfully'
     };
   } catch (error) {
+    console.error('Error deleting file/folder:', error);
     return reply.code(500).send({ error: 'Failed to delete file/folder' });
   }
 });

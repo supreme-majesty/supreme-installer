@@ -7,7 +7,7 @@ import './FileManager.css';
 
 const FileManager = () => {
   const { token } = useAuth();
-  const [currentPath, setCurrentPath] = useState('/var/www/html');
+  const [currentPath, setCurrentPath] = useState('/opt/lampp/htdocs/codes');
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileContent, setFileContent] = useState('');
@@ -20,10 +20,41 @@ const FileManager = () => {
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [showDeleteFileModal, setShowDeleteFileModal] = useState(false);
   const [fileToDelete, setFileToDelete] = useState(null);
+  const [platformConfig, setPlatformConfig] = useState(null);
+
+  useEffect(() => {
+    fetchPlatformConfig();
+  }, []);
+
+  useEffect(() => {
+    if (platformConfig?.webroot) {
+      setCurrentPath(platformConfig.webroot);
+    }
+  }, [platformConfig]);
 
   useEffect(() => {
     fetchFiles(currentPath);
   }, [currentPath]);
+
+  const fetchPlatformConfig = async () => {
+    try {
+      const response = await fetch('/api/platform', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const config = await response.json();
+        setPlatformConfig(config);
+        console.log('Platform config loaded:', config);
+      } else {
+        console.error('Failed to fetch platform config');
+      }
+    } catch (error) {
+      console.error('Error fetching platform config:', error);
+    }
+  };
 
   const fetchFiles = async (path) => {
     try {
@@ -40,10 +71,43 @@ const FileManager = () => {
         setFiles(data.files || []);
       } else {
         const errorData = await response.json();
-        setError(errorData.error || 'Failed to fetch files');
+        const errorMessage = errorData.error || 'Failed to fetch files';
+        
+        // If the default path doesn't exist, try fallback paths
+        if (response.status === 404 && path === platformConfig?.webroot) {
+          console.log('Webroot path not found, trying fallback paths...');
+          const fallbackPaths = [
+            platformConfig?.baseWebroot || '/opt/lampp/htdocs',
+            '/home/supreme-majesty',
+            '/var/www/html',
+            '/var/www'
+          ];
+          
+          for (const fallbackPath of fallbackPaths) {
+            try {
+              const fallbackResponse = await fetch(`/api/files?path=${encodeURIComponent(fallbackPath)}`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              
+              if (fallbackResponse.ok) {
+                const fallbackData = await fallbackResponse.json();
+                setFiles(fallbackData.files || []);
+                setCurrentPath(fallbackPath);
+                console.log(`Successfully loaded files from fallback path: ${fallbackPath}`);
+                return;
+              }
+            } catch (fallbackError) {
+              console.log(`Fallback path ${fallbackPath} also failed:`, fallbackError);
+            }
+          }
+        }
+        
+        setError(errorMessage);
       }
     } catch (error) {
-      setError('Failed to fetch files');
+      setError('Network error: Failed to fetch files');
       console.error('Error fetching files:', error);
     } finally {
       setLoading(false);
@@ -106,6 +170,7 @@ const FileManager = () => {
   const createFile = async (fileName, isDirectory = false) => {
     try {
       setLoading(true);
+      setError(null);
       const response = await fetch('/api/files/create', {
         method: 'POST',
         headers: {
@@ -124,10 +189,26 @@ const FileManager = () => {
         return { success: true };
       } else {
         const errorData = await response.json();
-        return { success: false, error: errorData.error || 'Failed to create file' };
+        let errorMessage = errorData.error || 'Failed to create file';
+        
+        // Provide more specific error messages
+        if (response.status === 403) {
+          errorMessage = 'Permission denied: You don\'t have write access to this directory. Try using your home directory instead.';
+        } else if (response.status === 400 && errorMessage.includes('Invalid name')) {
+          errorMessage = 'Invalid file/folder name. Only use letters, numbers, dots, underscores, and hyphens.';
+        } else if (response.status === 409) {
+          errorMessage = 'A file or folder with this name already exists.';
+        } else if (response.status === 400 && errorMessage.includes('Parent directory')) {
+          errorMessage = 'The parent directory does not exist. Please navigate to a valid directory first.';
+        }
+        
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
       }
     } catch (error) {
-      return { success: false, error: 'Failed to create file' };
+      const errorMessage = 'Network error: Failed to create file';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
     } finally {
       setLoading(false);
     }
@@ -141,6 +222,7 @@ const FileManager = () => {
   const deleteFile = async (filePath) => {
     try {
       setLoading(true);
+      setError(null);
       const response = await fetch('/api/files/delete', {
         method: 'DELETE',
         headers: {
@@ -159,10 +241,14 @@ const FileManager = () => {
         return { success: true };
       } else {
         const errorData = await response.json();
-        return { success: false, error: errorData.error || 'Failed to delete file' };
+        const errorMessage = errorData.error || 'Failed to delete file';
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
       }
     } catch (error) {
-      return { success: false, error: 'Failed to delete file' };
+      const errorMessage = 'Network error: Failed to delete file';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
     } finally {
       setLoading(false);
     }
@@ -236,6 +322,21 @@ const FileManager = () => {
           <span className="error-icon">⚠️</span>
           {error}
           <button onClick={() => setError(null)} className="error-close">×</button>
+          {(error.includes('Path not allowed') || error.includes('Permission denied')) && (
+            <div style={{ marginTop: '10px', fontSize: '0.9em', opacity: 0.8 }}>
+              <p>Try accessing one of these accessible paths:</p>
+              <ul style={{ margin: '5px 0', paddingLeft: '20px' }}>
+                <li>{platformConfig?.webroot || '/opt/lampp/htdocs/codes'} (Webroot - recommended for projects)</li>
+                <li>{platformConfig?.baseWebroot || '/opt/lampp/htdocs'} (Base webroot)</li>
+                <li>/home/supreme-majesty (Your home directory)</li>
+                <li>/var/www/html</li>
+                <li>/var/www</li>
+              </ul>
+              <p style={{ marginTop: '10px', fontStyle: 'italic' }}>
+                💡 Tip: The webroot directory is where your web projects are stored and has full access.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -297,6 +398,21 @@ const FileManager = () => {
                         ⊞
                       </button>
                     </div>
+                    
+                    <button 
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => navigateToPath(platformConfig?.webroot || '/opt/lampp/htdocs/codes')}
+                      title="Go to webroot directory"
+                    >
+                      🌐 Webroot
+                    </button>
+                    <button 
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => navigateToPath('/home/supreme-majesty')}
+                      title="Go to home directory"
+                    >
+                      🏠 Home
+                    </button>
                     
                     <input
                       type="text"

@@ -143,6 +143,7 @@ const Database = () => {
   const createDatabase = async (dbName) => {
     try {
       setLoading(true);
+      setError(null);
       const response = await fetch('/api/database/create', {
         method: 'POST',
         headers: {
@@ -156,12 +157,17 @@ const Database = () => {
         await fetchDatabases();
         setSelectedDb(dbName);
         fetchTables(dbName);
+        return { success: true };
       } else {
         const data = await response.json();
-        setError(data.error || 'Failed to create database');
+        const errorMessage = data.error || 'Failed to create database';
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
       }
     } catch (error) {
-      setError('Failed to create database');
+      const errorMessage = 'Network error: Failed to create database';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
     } finally {
       setLoading(false);
     }
@@ -175,6 +181,7 @@ const Database = () => {
   const deleteDatabase = async (dbName) => {
     try {
       setLoading(true);
+      setError(null);
       const response = await fetch(`/api/database/delete/${dbName}`, {
         method: 'DELETE',
         headers: {
@@ -188,12 +195,17 @@ const Database = () => {
           setSelectedDb('');
           setTables([]);
         }
+        return { success: true };
       } else {
         const data = await response.json();
-        setError(data.error || 'Failed to delete database');
+        const errorMessage = data.error || 'Failed to delete database';
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
       }
     } catch (error) {
-      setError('Failed to delete database');
+      const errorMessage = 'Network error: Failed to delete database';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
     } finally {
       setLoading(false);
     }

@@ -1156,6 +1156,154 @@ fastify.delete('/api/files/delete', { preHandler: authenticateToken }, async (re
   }
 });
 
+// File Search endpoints
+fastify.post('/api/files/search', { preHandler: authenticateToken }, async (request, reply) => {
+  try {
+    const { 
+      query, 
+      path = '/home/supreme-majesty', 
+      fileTypes = [], 
+      searchContent = false, 
+      caseSensitive = false,
+      maxResults = 100,
+      excludePaths = ['node_modules', '.git', '.vscode', 'dist', 'build']
+    } = request.body;
+    
+    if (!query || query.trim().length === 0) {
+      return reply.code(400).send({ error: 'Search query is required' });
+    }
+    
+    // Security: Validate search path
+    const normalizedPath = resolve(path);
+    const allowedPaths = [
+      '/home/supreme-majesty',
+      '/home',
+      '/var/www/html',
+      '/opt/lampp/htdocs', 
+      process.cwd(),
+      '/var/www',
+      '/usr/local/www',
+      '/srv/www'
+    ];
+    
+    const isAllowed = allowedPaths.some(allowedPath => 
+      normalizedPath.startsWith(resolve(allowedPath))
+    );
+    
+    if (!isAllowed) {
+      return reply.code(403).send({ error: 'Access denied: Search path not allowed' });
+    }
+    
+    if (!existsSync(normalizedPath)) {
+      return reply.code(404).send({ error: 'Search directory not found' });
+    }
+    
+    const searchResults = [];
+    const searchQuery = caseSensitive ? query : query.toLowerCase();
+    
+    // Recursive file search function
+    const searchDirectory = async (dirPath, depth = 0) => {
+      if (depth > 10) return; // Prevent infinite recursion
+      
+      try {
+        const items = readdirSync(dirPath, { withFileTypes: true });
+        
+        for (const item of items) {
+          const fullPath = join(dirPath, item.name);
+          
+          // Skip excluded paths
+          if (excludePaths.some(excludePath => fullPath.includes(excludePath))) {
+            continue;
+          }
+          
+          if (item.isDirectory()) {
+            // Recursively search subdirectories
+            await searchDirectory(fullPath, depth + 1);
+          } else if (item.isFile()) {
+            const fileName = item.name;
+            const fileExt = fileName.split('.').pop()?.toLowerCase();
+            
+            // Check file type filter
+            if (fileTypes.length > 0 && !fileTypes.includes(fileExt)) {
+              continue;
+            }
+            
+            // Check filename match
+            const fileNameMatch = caseSensitive ? 
+              fileName.includes(query) : 
+              fileName.toLowerCase().includes(searchQuery);
+            
+            if (fileNameMatch) {
+              const stats = statSync(fullPath);
+              searchResults.push({
+                name: fileName,
+                path: fullPath,
+                size: stats.size,
+                modified: stats.mtime,
+                extension: fileExt,
+                matchType: 'filename'
+              });
+            }
+            
+            // Content search if enabled and file is not too large
+            if (searchContent && stats.size < 1024 * 1024) { // 1MB limit for content search
+              try {
+                const content = readFileSync(fullPath, 'utf8');
+                const contentMatch = caseSensitive ? 
+                  content.includes(query) : 
+                  content.toLowerCase().includes(searchQuery);
+                
+                if (contentMatch && !fileNameMatch) {
+                  const stats = statSync(fullPath);
+                  searchResults.push({
+                    name: fileName,
+                    path: fullPath,
+                    size: stats.size,
+                    modified: stats.mtime,
+                    extension: fileExt,
+                    matchType: 'content'
+                  });
+                }
+              } catch (contentError) {
+                // Skip files that can't be read (binary files, etc.)
+                continue;
+              }
+            }
+            
+            // Limit results to prevent overwhelming response
+            if (searchResults.length >= maxResults) {
+              return;
+            }
+          }
+        }
+      } catch (error) {
+        // Skip directories that can't be accessed
+        console.log(`Skipping directory ${dirPath}: ${error.message}`);
+      }
+    };
+    
+    await searchDirectory(normalizedPath);
+    
+    // Sort results by relevance (filename matches first, then by name)
+    searchResults.sort((a, b) => {
+      if (a.matchType === 'filename' && b.matchType === 'content') return -1;
+      if (a.matchType === 'content' && b.matchType === 'filename') return 1;
+      return a.name.localeCompare(b.name);
+    });
+    
+    return {
+      results: searchResults,
+      total: searchResults.length,
+      query: query,
+      searchPath: normalizedPath,
+      searchTime: Date.now()
+    };
+  } catch (error) {
+    console.error('Error searching files:', error);
+    return reply.code(500).send({ error: 'File search failed' });
+  }
+});
+
 // Terminal endpoints
 fastify.post('/api/terminal/execute', { preHandler: authenticateToken }, async (request, reply) => {
   try {

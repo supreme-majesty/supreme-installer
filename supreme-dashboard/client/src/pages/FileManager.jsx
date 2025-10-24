@@ -21,6 +21,21 @@ const FileManager = () => {
   const [showDeleteFileModal, setShowDeleteFileModal] = useState(false);
   const [fileToDelete, setFileToDelete] = useState(null);
   const [platformConfig, setPlatformConfig] = useState(null);
+  
+  // Search functionality state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchPath, setSearchPath] = useState('/home/supreme-majesty');
+  const [searchOptions, setSearchOptions] = useState({
+    fileTypes: [],
+    searchContent: false,
+    caseSensitive: false,
+    maxResults: 100
+  });
+  const [searchCache, setSearchCache] = useState(new Map());
+  const [lastSearchTime, setLastSearchTime] = useState(0);
+  const [searchTimeout, setSearchTimeout] = useState(null);
 
   useEffect(() => {
     fetchPlatformConfig();
@@ -35,6 +50,13 @@ const FileManager = () => {
   useEffect(() => {
     fetchFiles(currentPath);
   }, [currentPath]);
+
+  // Trigger search when search options change
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      debouncedSearch(searchQuery);
+    }
+  }, [searchPath, searchOptions]);
 
   const fetchPlatformConfig = async () => {
     try {
@@ -258,6 +280,104 @@ const FileManager = () => {
     setCurrentPath(path);
     setSelectedFile(null);
     setFileContent('');
+  };
+
+  const performSearch = async () => {
+    if (!searchQuery.trim()) {
+      setError('Please enter a search query');
+      return;
+    }
+
+    // Create cache key
+    const cacheKey = `${searchQuery}-${searchPath}-${JSON.stringify(searchOptions)}`;
+    
+    // Check cache first (cache valid for 5 minutes)
+    const now = Date.now();
+    if (searchCache.has(cacheKey) && (now - lastSearchTime) < 300000) {
+      const cachedResult = searchCache.get(cacheKey);
+      setSearchResults(cachedResult.results);
+      setLastSearchTime(cachedResult.timestamp);
+      return;
+    }
+
+    try {
+      setSearchLoading(true);
+      setError(null);
+      
+      const response = await fetch('/api/files/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          query: searchQuery,
+          path: searchPath,
+          ...searchOptions
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSearchResults(data.results || []);
+        
+        // Cache the results
+        const cacheData = {
+          results: data.results || [],
+          timestamp: now
+        };
+        setSearchCache(prev => new Map(prev).set(cacheKey, cacheData));
+        setLastSearchTime(now);
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Search failed');
+      }
+    } catch (error) {
+      setError('Network error: Search failed');
+      console.error('Error performing search:', error);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSearchResultClick = (result) => {
+    if (result.matchType === 'filename') {
+      // Navigate to the file's directory and select the file
+      const dirPath = result.path.split('/').slice(0, -1).join('/');
+      setCurrentPath(dirPath);
+      setActiveTab('browser');
+      // The file will be highlighted in the browser
+    } else {
+      // Open the file in the editor
+      fetchFileContent(result.path);
+    }
+  };
+
+  const debouncedSearch = (query) => {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    const timeout = setTimeout(() => {
+      if (query.trim()) {
+        performSearch();
+      } else {
+        setSearchResults([]);
+      }
+    }, 500); // 500ms delay
+    
+    setSearchTimeout(timeout);
+  };
+
+  const clearSearchCache = () => {
+    setSearchCache(new Map());
+    setLastSearchTime(0);
+  };
+
+  const handleSearchQueryChange = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    debouncedSearch(query);
   };
 
   const getFileIcon = (file) => {
@@ -563,10 +683,194 @@ const FileManager = () => {
         {/* Search Tab */}
         {activeTab === 'search' && (
           <div className="file-search">
-            <div className="dashboard-card">
-              <h3>Search Files</h3>
-              <div className="search-content">
-                <p>File search functionality will be implemented here.</p>
+            <div className="search-header">
+              <div className="dashboard-card">
+                <div className="search-form">
+                  <div className="search-input-group">
+                    <input
+                      type="text"
+                      placeholder="Enter search query..."
+                      value={searchQuery}
+                      onChange={handleSearchQueryChange}
+                      className="search-query-input"
+                      onKeyPress={(e) => e.key === 'Enter' && performSearch()}
+                    />
+                    <button 
+                      className="btn btn-primary"
+                      onClick={performSearch}
+                      disabled={searchLoading || !searchQuery.trim()}
+                    >
+                      {searchLoading ? '🔍 Searching...' : '🔍 Search'}
+                    </button>
+                    <button 
+                      className="btn btn-secondary"
+                      onClick={clearSearchCache}
+                      title="Clear search cache"
+                    >
+                      🗑️ Clear Cache
+                    </button>
+                  </div>
+                  
+                  <div className="search-options">
+                    <div className="search-path">
+                      <label>Search Path:</label>
+                      <select 
+                        value={searchPath} 
+                        onChange={(e) => setSearchPath(e.target.value)}
+                        className="path-select"
+                      >
+                        <option value="/home/supreme-majesty">🏠 Home Directory</option>
+                        <option value={platformConfig?.webroot || '/opt/lampp/htdocs/codes'}>🌐 Webroot</option>
+                        <option value={platformConfig?.baseWebroot || '/opt/lampp/htdocs'}>📁 Base Webroot</option>
+                        <option value="/var/www/html">🌍 System Web Root</option>
+                        <option value="/var/www">📂 System Web</option>
+                      </select>
+                    </div>
+                    
+                    <div className="search-filters">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={searchOptions.searchContent}
+                          onChange={(e) => setSearchOptions(prev => ({ ...prev, searchContent: e.target.checked }))}
+                        />
+                        Search file contents
+                      </label>
+                      
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={searchOptions.caseSensitive}
+                          onChange={(e) => setSearchOptions(prev => ({ ...prev, caseSensitive: e.target.checked }))}
+                        />
+                        Case sensitive
+                      </label>
+                    </div>
+                    
+                    <div className="file-type-filters">
+                      <label>File Types:</label>
+                      <div className="file-type-buttons">
+                        {['js', 'jsx', 'ts', 'tsx', 'css', 'html', 'php', 'py', 'json', 'md', 'txt'].map(type => (
+                          <button
+                            key={type}
+                            className={`file-type-btn ${searchOptions.fileTypes.includes(type) ? 'active' : ''}`}
+                            onClick={() => {
+                              setSearchOptions(prev => ({
+                                ...prev,
+                                fileTypes: prev.fileTypes.includes(type)
+                                  ? prev.fileTypes.filter(t => t !== type)
+                                  : [...prev.fileTypes, type]
+                              }));
+                            }}
+                          >
+                            {type}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="search-results">
+              <div className="dashboard-card">
+                {searchLoading ? (
+                  <LoadingSpinner text="Searching files..." />
+                ) : searchResults.length > 0 ? (
+                  <div className="search-results-list">
+                    <div className="results-header">
+                      <h3>Search Results ({searchResults.length})</h3>
+                      <div className="results-info">
+                        <span>Query: "{searchQuery}"</span>
+                        <span>Path: {searchPath}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="results-list">
+                      {searchResults.map((result, index) => (
+                        <div 
+                          key={index}
+                          className="search-result-item"
+                          onClick={() => handleSearchResultClick(result)}
+                        >
+                          <div className="result-icon">
+                            {getFileIcon({ name: result.name, isDirectory: false })}
+                          </div>
+                          <div className="result-info">
+                            <div className="result-name">{result.name}</div>
+                            <div className="result-path">{result.path}</div>
+                            <div className="result-details">
+                              <span className={`match-type ${result.matchType}`}>
+                                {result.matchType === 'filename' ? '📄 Filename' : '📝 Content'}
+                              </span>
+                              <span className="file-size">{formatFileSize(result.size)}</span>
+                              <span className="file-date">
+                                {new Date(result.modified).toLocaleDateString()}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="result-actions">
+                            <button 
+                              className="btn btn-secondary btn-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                fetchFileContent(result.path);
+                              }}
+                              title="Open in editor"
+                            >
+                              ✏️
+                            </button>
+                            <button 
+                              className="btn btn-secondary btn-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const dirPath = result.path.split('/').slice(0, -1).join('/');
+                                setCurrentPath(dirPath);
+                                setActiveTab('browser');
+                              }}
+                              title="Show in browser"
+                            >
+                              📁
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : searchQuery ? (
+                  <div className="empty-search">
+                    <div className="empty-icon">🔍</div>
+                    <p>No files found matching "{searchQuery}"</p>
+                    <p className="search-tips">
+                      Try adjusting your search terms or enabling content search
+                    </p>
+                  </div>
+                ) : (
+                  <div className="search-placeholder">
+                    <div className="placeholder-icon">🔍</div>
+                    <h3>File Search</h3>
+                    <p>Search for files by name or content across your project directories</p>
+                    <div className="search-features">
+                      <div className="feature">
+                        <span className="feature-icon">📄</span>
+                        <span>Search by filename</span>
+                      </div>
+                      <div className="feature">
+                        <span className="feature-icon">📝</span>
+                        <span>Search file contents</span>
+                      </div>
+                      <div className="feature">
+                        <span className="feature-icon">🎯</span>
+                        <span>Filter by file type</span>
+                      </div>
+                      <div className="feature">
+                        <span className="feature-icon">⚡</span>
+                        <span>Fast recursive search</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

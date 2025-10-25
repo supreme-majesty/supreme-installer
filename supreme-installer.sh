@@ -19,6 +19,8 @@ source "$SCRIPT_DIR/supreme/lib/version.sh"
 source "$SCRIPT_DIR/supreme/modules/platform.sh"
 # shellcheck source=modules/dependencies.sh
 source "$SCRIPT_DIR/supreme/modules/dependencies.sh"
+# shellcheck source=modules/virtualhost.sh
+source "$SCRIPT_DIR/supreme/modules/virtualhost.sh"
 
 # ----------------------
 # Preconditions
@@ -62,6 +64,11 @@ DEFAULT_PROTOCOL=${DEFAULT_PROTOCOL:-http}
 read -rp "Enable database management? [Y/n] (default: Y): " ENABLE_DB
 ENABLE_DB=${ENABLE_DB:-Y}
 
+# ----------------------
+# Virtual Host Mode Selection
+# ----------------------
+select_virtualhost_mode
+
 # Make choices clear
 log "Configuration summary:"
 echo "  Platform:        $PLATFORM"
@@ -69,6 +76,7 @@ echo "  Webroot folder:  $HTDOCS_ROOT_DEFAULT/$PROJECT_FOLDER"
 echo "  Domain suffix:   .$TLD"
 echo "  Default protocol:$DEFAULT_PROTOCOL"
 echo "  Database mgmt:   $ENABLE_DB"
+echo "  Virtual host:    $VIRTUALHOST_MODE mode"
 echo "  Vhosts file:     $VHOSTS_PATH"
 echo "  Cert folder:     $CERT_ROOT"
 echo
@@ -117,25 +125,16 @@ fi
 # ----------------------
 # Apache Configuration
 # ----------------------
-SUPREME_VHOST_INCLUDE="$SYS_CONF/supreme-vhosts.conf"
+log "Configuring Apache virtual hosts in $VIRTUALHOST_MODE mode..."
 
-log "Creating Supreme include file at $SUPREME_VHOST_INCLUDE (idempotent)."
-cat > /tmp/supreme-vhosts.tmp <<EOF
-# Supreme auto vhosts include (managed by supreme command)
-# DO NOT EDIT MANUALLY — use 'supreme' CLI.
-# This file is safe to include in Apache configuration.
-# It will load per-site vhosts stored in /etc/supreme/sites-enabled/
-EOF
-
-sudo mv /tmp/supreme-vhosts.tmp "$SUPREME_VHOST_INCLUDE"
-ensure_dir "/etc/supreme/sites-available"
-ensure_dir "/etc/supreme/sites-enabled"
-
-# Ensure main VHOSTS_PATH includes the supreme include (idempotent)
-if ! grep -q "supreme-vhosts.conf" "$VHOSTS_PATH" 2>/dev/null; then
-  log "Linking Supreme include into Apache vhosts file ($VHOSTS_PATH)."
-  echo -e "\n# Supreme include (added by supreme-setup)\nInclude $SUPREME_VHOST_INCLUDE\n" | sudo tee -a "$VHOSTS_PATH" >/dev/null
-fi
+case "$VIRTUALHOST_MODE" in
+  simple)
+    setup_virtualdocumentroot "$TLD" "$HTDOCS_DIR" "$SSL_DIR" "$VHOSTS_PATH"
+    ;;
+  advanced)
+    setup_traditional_vhosts "$TLD" "$HTDOCS_DIR" "$SSL_DIR" "$VHOSTS_PATH"
+    ;;
+esac
 
 # ----------------------
 # Configuration Save

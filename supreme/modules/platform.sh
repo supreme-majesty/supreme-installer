@@ -22,7 +22,7 @@ configure_platform() {
     windows)
       # Detect drive letter and use appropriate paths
       local drive_letter="C"
-      if [[ -n "$SYSTEMDRIVE" ]]; then
+      if [[ -n "${SYSTEMDRIVE:-}" ]]; then
         drive_letter="${SYSTEMDRIVE:0:1}"
       fi
       VHOSTS_PATH_CANDIDATE="/${drive_letter,,}/xampp/apache/conf/extra/httpd-vhosts.conf"
@@ -33,7 +33,7 @@ configure_platform() {
     wsl)
       # WSL: Use Windows paths mounted in WSL
       local drive_letter="C"
-      if [[ -n "$SYSTEMDRIVE" ]]; then
+      if [[ -n "${SYSTEMDRIVE:-}" ]]; then
         drive_letter="${SYSTEMDRIVE:0:1}"
       fi
       VHOSTS_PATH_CANDIDATE="/mnt/${drive_letter,,}/xampp/apache/conf/extra/httpd-vhosts.conf"
@@ -79,7 +79,7 @@ detect_apache_config() {
     # For WSL, also check Windows XAMPP installation
     if [[ "$PLATFORM" == "wsl" ]] && [[ -z "${VHOSTS_PATH:-}" ]]; then
       local drive_letter="C"
-      if [[ -n "$SYSTEMDRIVE" ]]; then
+      if [[ -n "${SYSTEMDRIVE:-}" ]]; then
         drive_letter="${SYSTEMDRIVE:0:1}"
       fi
       local windows_xampp="/mnt/${drive_letter,,}/xampp"
@@ -164,7 +164,7 @@ detect_database() {
     windows)
       # Detect drive letter and check for XAMPP MySQL
       local drive_letter="C"
-      if [[ -n "$SYSTEMDRIVE" ]]; then
+      if [[ -n "${SYSTEMDRIVE:-}" ]]; then
         drive_letter="${SYSTEMDRIVE:0:1}"
       fi
       
@@ -237,7 +237,7 @@ detect_database() {
       
       # Check for Windows XAMPP mounted in WSL
       local drive_letter="C"
-      if [[ -n "$SYSTEMDRIVE" ]]; then
+      if [[ -n "${SYSTEMDRIVE:-}" ]]; then
         drive_letter="${SYSTEMDRIVE:0:1}"
       fi
       local windows_mysql="/mnt/${drive_letter,,}/xampp/mysql/bin/mysql.exe"

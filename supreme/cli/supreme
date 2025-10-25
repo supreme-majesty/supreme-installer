@@ -17,6 +17,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/../modules/projects.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../modules/dependencies.sh"
 # shellcheck source=modules/sync.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../modules/sync.sh"
+# shellcheck source=modules/virtualhost.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../modules/virtualhost.sh"
 
 # ----------------------
 # CLI Configuration
@@ -40,6 +42,7 @@ Usage: supreme <command> [args]
 Commands:
   new <name>            Create a new project folder, vhost, and /etc/hosts entry
   create <type> <name>  Create a new project with framework template (laravel, wordpress, react, vue, etc.)
+  quick <domain> <folder> Create a project with custom domain (e.g. supreme quick myproject.test myproject)
   start <name>          Start a project (enable vhost and restart Apache)
   stop <name>           Stop a project (disable vhost and restart Apache)
   dev <name>            Start development server with hot reloading
@@ -54,6 +57,11 @@ Commands:
   restart               Restart Apache
   doctor                Run health checks
   uninstall             Remove supreme (configs and CLI). Does NOT delete your projects unless confirmed.
+
+Virtual Host Mode Commands:
+  mode simple           Switch to simple mode (VirtualDocumentRoot - automatic folder-to-domain)
+  mode advanced         Switch to advanced mode (individual vhost files)
+  mode status           Show current virtual host mode
 
 Cloud Sync Commands:
   sync setup           Configure cloud sync backend (GitHub/GitLab)
@@ -116,11 +124,21 @@ handle_command() {
         exit 1
       fi
       
-      create_basic_project "$name"
-      create_vhost "$name"
-      add_hosts_entry "$name"
+      # Use virtual host mode-specific project creation
+      case "$VIRTUALHOST_MODE" in
+        simple)
+          create_simple_project "$name"
+          ;;
+        advanced)
+          create_advanced_project "$name"
+          ;;
+        *)
+          # Fallback to advanced mode
+          create_advanced_project "$name"
+          ;;
+      esac
+      
       restart_apache
-      ok "Site created: http$([ "$DEFAULT_PROTOCOL" == "https" ] && echo 's')://$name.$TLD"
       ;;
       
     create)
@@ -145,6 +163,18 @@ handle_command() {
         restart_apache
         ok "$framework project created: http$([ "$DEFAULT_PROTOCOL" == "https" ] && echo 's')://$name.$TLD"
       fi
+      ;;
+      
+    quick)
+      local domain="${2:-}"
+      local folder="${3:-}"
+      if [[ -z "$domain" ]] || [[ -z "$folder" ]]; then
+        echo "Usage: supreme quick <domain> <folder_name>"
+        echo "Example: supreme quick myproject.test myproject"
+        exit 1
+      fi
+      
+      create_quick_project "$domain" "$folder"
       ;;
       
     start)
@@ -525,8 +555,7 @@ handle_command() {
       ;;
       
     list)
-      echo "Projects under $HTDOCS_ROOT:"
-      ls -1 "$HTDOCS_ROOT" || true
+      list_projects
       ;;
       
     info)
@@ -618,6 +647,37 @@ handle_command() {
         status) sync_status ;;
         reset) sync_reset ;;
         *) echo "Usage: supreme sync <setup|push|pull|status|reset>"; exit 1 ;;
+      esac
+      ;;
+      
+    mode)
+      case "${2:-}" in
+        simple)
+          switch_virtualhost_mode "simple"
+          ;;
+        advanced)
+          switch_virtualhost_mode "advanced"
+          ;;
+        status)
+          echo "Current virtual host mode: $VIRTUALHOST_MODE"
+          case "$VIRTUALHOST_MODE" in
+            simple)
+              echo "  ✓ VirtualDocumentRoot mode - automatic folder-to-domain mapping"
+              echo "  ✓ Just create folders in $HTDOCS_ROOT and they work automatically"
+              ;;
+            advanced)
+              echo "  ✓ Individual vhost files mode - full control per project"
+              echo "  ✓ Use 'supreme new <name>' to create projects with custom vhosts"
+              ;;
+          esac
+          ;;
+        *)
+          echo "Usage: supreme mode <simple|advanced|status>"
+          echo "  simple   - Switch to VirtualDocumentRoot mode (automatic)"
+          echo "  advanced - Switch to individual vhost files mode"
+          echo "  status   - Show current mode"
+          exit 1
+          ;;
       esac
       ;;
       

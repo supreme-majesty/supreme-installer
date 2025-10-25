@@ -24,11 +24,11 @@ confirm() {
 # ----------------------
 detect_platform() {
   # Check for WSL first (Windows Subsystem for Linux)
-  if [[ -n "$WSL_DISTRO_NAME" ]] || [[ -n "$WSLENV" ]] || [[ -f /proc/version ]] && grep -qi microsoft /proc/version; then
+  if [[ -n "${WSL_DISTRO_NAME:-}" ]] || [[ -n "${WSLENV:-}" ]] || [[ -f /proc/version ]] && grep -qi microsoft /proc/version; then
     echo "wsl"
   elif [[ "$(uname -s)" == "Darwin" ]]; then
     echo "macos"
-  elif [[ "$(uname -s)" == *"MINGW"* ]] || [[ "$(uname -s)" == *"CYGWIN"* ]] || [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
+  elif [[ "$(uname -s)" == *"MINGW"* ]] || [[ "$(uname -s)" == *"CYGWIN"* ]] || [[ "${OSTYPE:-}" == "msys" ]] || [[ "${OSTYPE:-}" == "win32" ]]; then
     echo "windows"
   else
     echo "linux"
@@ -157,7 +157,7 @@ get_config_path() {
       ;;
     wsl)
       # WSL: Use Windows home directory mounted in WSL
-      if [[ -n "$USERPROFILE" ]]; then
+      if [[ -n "${USERPROFILE:-}" ]]; then
         home_dir="$USERPROFILE"
       else
         home_dir="$HOME"
@@ -201,6 +201,7 @@ TLD=$TLD
 PROJECT_FOLDER=$PROJECT_FOLDER
 DEFAULT_PROTOCOL=$DEFAULT_PROTOCOL
 ENABLE_DB=$ENABLE_DB
+VIRTUALHOST_MODE=$VIRTUALHOST_MODE
 DB_HOST=$DB_HOST
 DB_PORT=$DB_PORT
 DB_ROOT_USER=$DB_ROOT_USER

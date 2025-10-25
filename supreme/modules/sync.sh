@@ -9,6 +9,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib/utils.sh"
 # ----------------------
 # Sync Configuration
 # ----------------------
+SUPREME_CONFIG_DIR="${SYS_CONF_DIR:-/etc/supreme}"
 SYNC_CONFIG_FILE="$SUPREME_CONFIG_DIR/sync.json"
 SYNC_TEMP_DIR="/tmp/supreme-sync-$$"
 SYNC_ENCRYPTION_KEY_FILE="$SUPREME_CONFIG_DIR/sync.key"

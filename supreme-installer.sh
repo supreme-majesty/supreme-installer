@@ -147,15 +147,45 @@ ok "Saved config to $USER_CONF_FILE"
 # ----------------------
 log "Installing 'supreme' CLI to /usr/local/bin/supreme"
 
-# Copy the CLI script
-sudo cp "$SCRIPT_DIR/supreme/cli/supreme" /usr/local/bin/supreme
+# Copy the CLI script with corrected paths
+sudo cp "$SCRIPT_DIR/supreme/cli/supreme" /tmp/supreme-cli-temp
+# Fix the paths in the CLI
+sudo sed -i 's|source "$(dirname "${BASH_SOURCE\[0\]}")/../lib/utils.sh"|source "/usr/local/share/supreme/lib/utils.sh"|g' /tmp/supreme-cli-temp
+sudo sed -i 's|source "$(dirname "${BASH_SOURCE\[0\]}")/../modules/|source "/usr/local/share/supreme/modules/|g' /tmp/supreme-cli-temp
+sudo cp /tmp/supreme-cli-temp /usr/local/bin/supreme
 sudo chmod +x /usr/local/bin/supreme
 
 ok "Installed CLI at /usr/local/bin/supreme"
 
 # ----------------------
+# Copy Modules to System
+# ----------------------
+log "Installing Supreme modules to /usr/local/share/supreme/"
+
+# Create directories
+sudo mkdir -p /usr/local/share/supreme/lib
+sudo mkdir -p /usr/local/share/supreme/modules
+
+# Copy lib files
+sudo cp "$SCRIPT_DIR/supreme/lib/"*.sh /usr/local/share/supreme/lib/
+
+# Copy modules
+sudo cp "$SCRIPT_DIR/supreme/modules/"*.sh /usr/local/share/supreme/modules/
+
+# Fix module paths to use absolute paths
+for module in /usr/local/share/supreme/modules/*.sh; do
+  if [[ -f "$module" ]]; then
+    sudo sed -i 's|source "$(dirname "${BASH_SOURCE\[0\]}")/../lib/utils.sh"|source "/usr/local/share/supreme/lib/utils.sh"|g' "$module"
+  fi
+done
+
+ok "Installed modules to /usr/local/share/supreme/"
+
+# ----------------------
 # Finalization
 # ----------------------
+SUPREME_VHOST_INCLUDE="/etc/supreme/supreme-vhosts.conf"
+
 # Append Include for sites-enabled into SUPREME_VHOST_INCLUDE so Apache will load them
 if ! grep -q "sites-enabled" "$SUPREME_VHOST_INCLUDE"; then
   echo -e "\n# Load enabled supreme sites\nIncludeOptional /etc/supreme/sites-enabled/*.conf\n" | sudo tee -a "$SUPREME_VHOST_INCLUDE" >/dev/null

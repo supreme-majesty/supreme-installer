@@ -242,25 +242,32 @@ const Database = () => {
 
   // Handle group header click (expand/collapse)
   const handleGroupClick = (groupKey) => {
-    // Clear any selected database when clicking on a group header
-    setSelectedDb('');
-    setSelectedTable('');
-    setTables([]);
-    
-    // Expand the clicked group and collapse all others
+    // Toggle the clicked group and collapse all others
     setExpandedNodes(prev => {
       const newExpanded = {};
+      const isCollapsingSameGroup = prev[groupKey] === true;
+      
       Object.keys(treeView).forEach(key => {
         if (treeView[key].type === 'group') {
           if (key === groupKey) {
-            // Always expand the clicked group
-            newExpanded[key] = true;
+            // Toggle the clicked group
+            newExpanded[key] = !prev[key];
           } else {
             // Collapse all other groups
             newExpanded[key] = false;
           }
         }
       });
+      
+      // Only clear selection when clicking on a different group
+      if (!isCollapsingSameGroup) {
+        // Clear selection when clicking on a different group
+        setSelectedDb('');
+        setSelectedTable('');
+        setTables([]);
+      }
+      // When collapsing the same group, keep the current selection and tables
+      
       return newExpanded;
     });
   };

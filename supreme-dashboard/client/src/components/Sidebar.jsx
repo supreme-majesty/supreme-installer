@@ -80,9 +80,9 @@ const Sidebar = ({ isOpen, onToggle }) => {
             </div>
           )}
         </div>
-        <button className="sidebar-toggle" onClick={onToggle}>
+        {/* <button className="sidebar-toggle" onClick={onToggle}>
           {isOpen ? '←' : '→'}
-        </button>
+        </button> */}
       </div>
 
       <nav className="sidebar-nav">

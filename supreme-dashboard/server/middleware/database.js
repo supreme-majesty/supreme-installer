@@ -985,6 +985,67 @@ export const searchDatabase = async (databaseName, searchQuery, filters = {}) =>
   }
 };
 
+// Get table data with pagination
+export const getTableData = async (databaseName, tableName, page = 1, limit = 50) => {
+  try {
+    console.log(`🔍 Getting table data for ${databaseName}.${tableName}, page ${page}, limit ${limit}...`);
+    
+    const offset = (page - 1) * limit;
+    let query, countQuery, data, totalRows;
+    
+    if (dbType === 'postgresql') {
+      // For PostgreSQL, create a temporary connection to the specific database
+      const tempPool = new Pool({
+        ...dbConfig,
+        database: databaseName
+      });
+      
+      query = `SELECT * FROM "${tableName}" LIMIT $1 OFFSET $2`;
+      countQuery = `SELECT COUNT(*) as total FROM "${tableName}"`;
+      
+      const dataResult = await tempPool.query(query, [limit, offset]);
+      const countResult = await tempPool.query(countQuery);
+      
+      data = dataResult.rows;
+      totalRows = parseInt(countResult.rows[0].total);
+      
+      await tempPool.end();
+    } else {
+      // For MySQL, switch to the database and execute the query
+      await connectionPool.query(`USE \`${databaseName}\``);
+      
+      query = `SELECT * FROM \`${tableName}\` LIMIT ? OFFSET ?`;
+      countQuery = `SELECT COUNT(*) as total FROM \`${tableName}\``;
+      
+      const [dataRows] = await connectionPool.execute(query, [limit, offset]);
+      const [countRows] = await connectionPool.execute(countQuery);
+      
+      data = dataRows;
+      totalRows = countRows[0].total;
+    }
+    
+    const totalPages = Math.ceil(totalRows / limit);
+    
+    console.log(`📊 Retrieved ${data.length} rows from ${tableName} (${totalRows} total rows)`);
+    
+    return {
+      success: true,
+      data: data,
+      pagination: {
+        currentPage: page,
+        totalPages: totalPages,
+        totalRows: totalRows,
+        limit: limit,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching table data:', error);
+    throw error;
+  }
+};
+
 // Close database connection
 export const closeConnection = async () => {
   if (connectionPool) {

@@ -39,6 +39,10 @@ const Database = () => {
   const [filteredTables, setFilteredTables] = useState([]);
   const [treeView, setTreeView] = useState({});
   const [expandedNodes, setExpandedNodes] = useState({});
+  const [tableData, setTableData] = useState(null);
+  const [tableDataLoading, setTableDataLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
 
   // Create tree structure from databases
   const createTreeStructure = (databases) => {
@@ -275,6 +279,35 @@ const Database = () => {
   const handleTableSelect = (tableName) => {
     setSelectedTable(tableName);
     setQuery(`SELECT * FROM ${tableName} LIMIT 100;`);
+    // Fetch table data for browsing
+    fetchTableData(tableName, 1);
+  };
+
+  const fetchTableData = async (tableName, page = 1) => {
+    if (!selectedDb || !tableName) return;
+    
+    try {
+      setTableDataLoading(true);
+      const response = await fetch(`/api/database/table-data/${selectedDb}/${tableName}?page=${page}&limit=50`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setTableData(data.data);
+        setPagination(data.pagination);
+        setCurrentPage(page);
+      } else {
+        setError(data.error || 'Failed to fetch table data');
+      }
+    } catch (error) {
+      setError('Failed to fetch table data');
+      console.error('Error fetching table data:', error);
+    } finally {
+      setTableDataLoading(false);
+    }
   };
 
   const getTableStructure = async (tableName) => {
@@ -647,6 +680,7 @@ const Database = () => {
     { id: 'browser', label: 'Database Browser', icon: '🗂️' },
     { id: 'query', label: 'SQL Query', icon: '💻' },
     { id: 'structure', label: 'Table Structure', icon: '📊' },
+    { id: 'data', label: 'Table Data', icon: '📋' },
     { id: 'search', label: 'Search', icon: '🔍' }
   ];
 
@@ -993,6 +1027,83 @@ const Database = () => {
                 <div className="empty-state">
                   <div className="empty-icon">⚠️</div>
                   <p>Failed to load table structure</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Table Data Tab */}
+        {activeTab === 'data' && (
+          <div className="table-data-section">
+            <div className="dashboard-card">
+              <h3>Table Data</h3>
+              {!selectedDb || !selectedTable ? (
+                <div className="empty-state">
+                  <div className="empty-icon">📋</div>
+                  <p>Select a database and table to view data</p>
+                </div>
+              ) : tableDataLoading ? (
+                <LoadingSpinner size="small" text="Loading table data..." />
+              ) : tableData && tableData.length > 0 ? (
+                <div className="table-data-content">
+                  <div className="data-header">
+                    <h4>{selectedTable} Data</h4>
+                    <div className="data-info">
+                      <span>Total Rows: {pagination?.totalRows || 0}</span>
+                      <span>Page {pagination?.currentPage || 1} of {pagination?.totalPages || 1}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="data-table-container">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          {Object.keys(tableData[0]).map(column => (
+                            <th key={column}>{column}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tableData.map((row, index) => (
+                          <tr key={index}>
+                            {Object.values(row).map((value, i) => (
+                              <td key={i}>{String(value || '')}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  {pagination && pagination.totalPages > 1 && (
+                    <div className="pagination">
+                      <button 
+                        className="btn btn-outline btn-sm"
+                        onClick={() => fetchTableData(selectedTable, currentPage - 1)}
+                        disabled={!pagination.hasPrev}
+                      >
+                        ← Previous
+                      </button>
+                      
+                      <span className="pagination-info">
+                        Page {pagination.currentPage} of {pagination.totalPages}
+                      </span>
+                      
+                      <button 
+                        className="btn btn-outline btn-sm"
+                        onClick={() => fetchTableData(selectedTable, currentPage + 1)}
+                        disabled={!pagination.hasNext}
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <div className="empty-icon">📋</div>
+                  <p>No data found in this table</p>
                 </div>
               )}
             </div>

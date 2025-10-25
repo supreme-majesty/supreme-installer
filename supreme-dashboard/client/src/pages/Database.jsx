@@ -37,6 +37,69 @@ const Database = () => {
   const [inlineSearchQuery, setInlineSearchQuery] = useState('');
   const [filteredDatabases, setFilteredDatabases] = useState([]);
   const [filteredTables, setFilteredTables] = useState([]);
+  const [treeView, setTreeView] = useState({});
+  const [expandedNodes, setExpandedNodes] = useState({});
+
+  // Create tree structure from databases
+  const createTreeStructure = (databases) => {
+    const tree = {};
+    const groups = {};
+    const standalone = [];
+    
+    databases.forEach(db => {
+      const name = db.name;
+      const parts = name.split('_');
+      
+      if (parts.length > 1) {
+        // Has prefix, add to group
+        const prefix = parts[0];
+        if (!groups[prefix]) {
+          groups[prefix] = [];
+        }
+        groups[prefix].push(db);
+      } else {
+        // Standalone database
+        standalone.push(db);
+      }
+    });
+    
+    // Add groups to tree (only if 2 or more databases with same prefix)
+    Object.entries(groups).forEach(([prefix, dbs]) => {
+      if (dbs.length >= 2) {
+        // Create group for 2+ databases
+        tree[prefix] = {
+          type: 'group',
+          name: prefix,
+          children: dbs.map(db => ({
+            type: 'database',
+            name: db.name,
+            data: db
+          })),
+          expanded: false
+        };
+      } else {
+        // Add single database as standalone
+        dbs.forEach(db => {
+          tree[db.name] = {
+            type: 'database',
+            name: db.name,
+            data: db
+          };
+        });
+      }
+    });
+    
+    // Add standalone databases to tree
+    standalone.forEach(db => {
+      tree[db.name] = {
+        type: 'database',
+        name: db.name,
+        data: db
+      };
+    });
+    
+    return tree;
+  };
 
   useEffect(() => {
     if (token) {
@@ -45,10 +108,29 @@ const Database = () => {
     }
   }, [token]);
 
-  // Initialize filtered states
+  // Initialize filtered states and tree view
   useEffect(() => {
     setFilteredDatabases(databases);
     setFilteredTables(tables);
+    
+    if (databases.length > 0) {
+      const tree = createTreeStructure(databases);
+      setTreeView(tree);
+      
+      // Only initialize expanded state if it's empty (first load)
+      setExpandedNodes(prev => {
+        if (Object.keys(prev).length === 0) {
+          const expanded = {};
+          Object.keys(tree).forEach(key => {
+            if (tree[key].type === 'group') {
+              expanded[key] = false;
+            }
+          });
+          return expanded;
+        }
+        return prev;
+      });
+    }
   }, [databases, tables]);
 
   useEffect(() => {
@@ -129,9 +211,58 @@ const Database = () => {
     setSelectedDb(dbName);
     setSelectedTable('');
     setTables([]);
+    
     if (dbName) {
       fetchTables(dbName);
+      
+      // Find which group this database belongs to
+      let selectedGroup = null;
+      Object.entries(treeView).forEach(([key, node]) => {
+        if (node.type === 'group') {
+          const hasSelectedDb = node.children.some(child => child.name === dbName);
+          if (hasSelectedDb) {
+            selectedGroup = key;
+          }
+        }
+      });
+      
+      // Update expanded state: collapse all groups except the one containing the selected database
+      setExpandedNodes(prev => {
+        const newExpanded = {};
+        Object.keys(treeView).forEach(key => {
+          if (treeView[key].type === 'group') {
+            // Only expand the group containing the selected database
+            newExpanded[key] = key === selectedGroup;
+          }
+        });
+        return newExpanded;
+      });
     }
+  };
+
+  // Handle group header click (expand/collapse)
+  const handleGroupClick = (groupKey) => {
+    // Clear any selected database when clicking on a group header
+    setSelectedDb('');
+    setSelectedTable('');
+    setTables([]);
+    
+    // Expand the clicked group and collapse all others
+    setExpandedNodes(prev => {
+      const newExpanded = {};
+      Object.keys(treeView).forEach(key => {
+        if (treeView[key].type === 'group') {
+          if (key === groupKey) {
+            // Always expand the clicked group
+            newExpanded[key] = true;
+          } else {
+            // Collapse all other groups
+            newExpanded[key] = false;
+          }
+        }
+      });
+      return newExpanded;
+    });
   };
 
   const handleTableSelect = (tableName) => {
@@ -397,11 +528,25 @@ const Database = () => {
     }
   };
 
+  // Toggle tree node expansion
+  const toggleNode = (nodeKey) => {
+    setExpandedNodes(prev => ({
+      ...prev,
+      [nodeKey]: !prev[nodeKey]
+    }));
+  };
+
   // Filter databases and tables based on search query
   useEffect(() => {
     if (!inlineSearchQuery.trim()) {
       setFilteredDatabases(databases || []);
       setFilteredTables(tables || []);
+      
+      // Update tree view when no search
+      if (databases.length > 0) {
+        const tree = createTreeStructure(databases);
+        setTreeView(tree);
+      }
       return;
     }
 
@@ -418,6 +563,23 @@ const Database = () => {
       table.name && table.name.toLowerCase().includes(query)
     );
     setFilteredTables(filteredTbls);
+    
+    // Update tree view with filtered results
+    if (filteredDbs.length > 0) {
+      const tree = createTreeStructure(filteredDbs);
+      setTreeView(tree);
+      
+      // Preserve expanded state for existing groups
+      setExpandedNodes(prev => {
+        const newExpanded = {};
+        Object.keys(tree).forEach(key => {
+          if (tree[key].type === 'group') {
+            newExpanded[key] = prev[key] || false;
+          }
+        });
+        return newExpanded;
+      });
+    }
   }, [inlineSearchQuery, databases, tables]);
 
   const fetchTableTemplates = async () => {
@@ -472,6 +634,7 @@ const Database = () => {
       setLoading(false);
     }
   };
+
 
   const tabs = [
     { id: 'browser', label: 'Database Browser', icon: '🗂️' },
@@ -542,37 +705,90 @@ const Database = () => {
                     </div>
                   </div>
                   
-                  <div className="database-list">
+                  <div className="database-tree">
                     {loading ? (
                       <LoadingSpinner size="small" text="Loading databases..." />
-                    ) : filteredDatabases.length === 0 ? (
+                    ) : Object.keys(treeView).length === 0 ? (
                       <div className="empty-state">
                         <div className="empty-icon">🗄️</div>
                         <p>{inlineSearchQuery.trim() ? `No databases found matching "${inlineSearchQuery}"` : 'No databases found'}</p>
                       </div>
                     ) : (
-                      filteredDatabases.map(db => (
-                        <div 
-                          key={db.name} 
-                          className={`database-item ${selectedDb === db.name ? 'selected' : ''}`}
-                          onClick={() => handleDatabaseSelect(db.name)}
-                        >
-                          <div className="database-info">
-                            <span className="database-name">{db.name}</span>
-                            <span className="database-size">{db.size || 'Unknown'}</span>
-                          </div>
-                          <div className="database-actions">
-                            <button 
-                              className="btn btn-danger btn-sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteDatabase(db.name);
-                              }}
-                              title="Delete database"
+                      Object.entries(treeView).map(([key, node]) => (
+                        <div key={key} className="tree-node">
+                          {node.type === 'group' ? (
+                            <div className="tree-group">
+                              <div 
+                                className="group-header"
+                                onClick={() => handleGroupClick(key)}
+                              >
+                                <div className="group-controls">
+                                  <span className="expand-icon">
+                                    {expandedNodes[key] ? '−' : '+'}
+                                  </span>
+                                  <span className="group-icon">🏢</span>
+                                </div>
+                                <span className="group-name">{node.name} ({node.children.length})</span>
+                              </div>
+                              
+                              {expandedNodes[key] && (
+                                <div className="group-children">
+                                  {node.children.map((child, index) => (
+                                    <div 
+                                      key={`${key}-${index}`}
+                                      className={`tree-database ${selectedDb === child.name ? 'selected' : ''}`}
+                                      onClick={() => handleDatabaseSelect(child.name)}
+                                    >
+                                      <div className="database-controls">
+                                        <span className="database-icon">🗃️</span>
+                                      </div>
+                                      <div className="database-info">
+                                        <span className="database-name">{child.name}</span>
+                                        <span className="database-size">{child.data.size || 'Unknown'}</span>
+                                      </div>
+                                      <div className="database-actions">
+                                        <button 
+                                          className="btn btn-danger btn-sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteDatabase(child.name);
+                                          }}
+                                          title="Delete database"
+                                        >
+                                          🗑️
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div 
+                              className={`tree-database ${selectedDb === node.name ? 'selected' : ''}`}
+                              onClick={() => handleDatabaseSelect(node.name)}
                             >
-                              🗑️
-                            </button>
-                          </div>
+                              <div className="database-controls">
+                                <span className="database-icon">🗃️</span>
+                              </div>
+                              <div className="database-info">
+                                <span className="database-name">{node.name}</span>
+                                <span className="database-size">{node.data.size || 'Unknown'}</span>
+                              </div>
+                              <div className="database-actions">
+                                <button 
+                                  className="btn btn-danger btn-sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteDatabase(node.name);
+                                  }}
+                                  title="Delete database"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))
                     )}

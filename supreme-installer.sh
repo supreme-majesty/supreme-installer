@@ -70,7 +70,7 @@ echo "  Domain suffix:   .$TLD"
 echo "  Default protocol:$DEFAULT_PROTOCOL"
 echo "  Database mgmt:   $ENABLE_DB"
 echo "  Vhosts file:     $VHOSTS_PATH"
-echo "  Cert folder:     $CERT_ROOT/$PROJECT_FOLDER"
+echo "  Cert folder:     $CERT_ROOT"
 echo
 
 if ! confirm "Continue with the above settings?"; then
@@ -81,7 +81,7 @@ fi
 # ----------------------
 # Directory Setup
 # ----------------------
-SSL_DIR="$CERT_ROOT/$PROJECT_FOLDER"
+SSL_DIR="$CERT_ROOT"
 HTDOCS_DIR="$HTDOCS_ROOT_DEFAULT/$PROJECT_FOLDER"
 SUPREME_DIR="/opt/supreme"
 SYS_CONF="/etc/supreme"

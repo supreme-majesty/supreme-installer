@@ -259,14 +259,14 @@ const Database = () => {
         }
       });
       
-      // Only clear selection when clicking on a different group
-      if (!isCollapsingSameGroup) {
-        // Clear selection when clicking on a different group
+      // Only clear selection when clicking on a different group AND no database is currently selected
+      if (!isCollapsingSameGroup && !selectedDb) {
+        // Clear selection when clicking on a different group and no database is selected
         setSelectedDb('');
         setSelectedTable('');
         setTables([]);
       }
-      // When collapsing the same group, keep the current selection and tables
+      // When collapsing the same group or when a database is already selected, keep the current selection and tables
       
       return newExpanded;
     });

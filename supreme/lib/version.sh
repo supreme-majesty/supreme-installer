@@ -2,7 +2,7 @@
 # Supreme Development Environment - Version Management
 
 # Default version if not set
-SUPREME_VERSION="3.5.6"
+SUPREME_VERSION="3.5.7"
 BUILD_DATE="${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}"
 GIT_COMMIT="${GIT_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo 'unknown')}"
 

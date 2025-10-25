@@ -182,6 +182,82 @@ done
 ok "Installed modules to /usr/local/share/supreme/"
 
 # ----------------------
+# Auto-configure Existing Projects
+# ----------------------
+log "Auto-configuring existing projects..."
+
+# Load virtualhost module for project configuration
+source "$SCRIPT_DIR/supreme/modules/virtualhost.sh"
+
+# Check if projects directory exists and has projects
+if [[ -d "$HTDOCS_DIR" ]]; then
+  PROJECT_COUNT=$(find "$HTDOCS_DIR" -maxdepth 1 -type d -not -path "$HTDOCS_DIR" | wc -l)
+  
+  if [[ "$PROJECT_COUNT" -gt 0 ]]; then
+    log "Found $PROJECT_COUNT existing projects in $HTDOCS_DIR"
+    log "Auto-configuring all existing projects..."
+    
+    # Configure each existing project
+    for project_dir in "$HTDOCS_DIR"/*; do
+      if [[ -d "$project_dir" ]]; then
+        project_name=$(basename "$project_dir")
+        log "Configuring project: $project_name"
+        
+        # Create vhost configuration for existing project
+        case "$VIRTUALHOST_MODE" in
+          simple)
+            # For simple mode, projects are automatically accessible
+            log "Project $project_name will be accessible at: https://$project_name.$TLD"
+            # Check if it's a Laravel project and create .htaccess
+            if [[ -f "$project_dir/artisan" && -d "$project_dir/public" ]]; then
+              log "Detected Laravel project: $project_name"
+              if [[ ! -f "$project_dir/public/.htaccess" ]]; then
+                log "Creating .htaccess file for Laravel project"
+                cat > "$project_dir/public/.htaccess" <<HTACCESS
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+
+    # Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Redirect Trailing Slashes If Not A Folder...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+
+    # Send Requests To Front Controller...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+HTACCESS
+                ok "Created .htaccess for Laravel project: $project_name"
+              fi
+            fi
+            ;;
+          advanced)
+            # For advanced mode, create individual vhost files
+            create_advanced_project "$project_name"
+            ;;
+        esac
+      fi
+    done
+    
+    ok "Auto-configured $PROJECT_COUNT existing projects"
+    log "All existing projects are now accessible with SSL, vhosts, and hosts entries configured"
+  else
+    log "No existing projects found in $HTDOCS_DIR"
+  fi
+else
+  log "Projects directory not found: $HTDOCS_DIR"
+fi
+
+# ----------------------
 # Finalization
 # ----------------------
 SUPREME_VHOST_INCLUDE="/etc/supreme/supreme-vhosts.conf"

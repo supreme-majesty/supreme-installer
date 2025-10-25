@@ -225,16 +225,114 @@ EOF
 }
 
 # ----------------------
+# Laravel Project Configuration
+# ----------------------
+configure_laravel_project() {
+  local name="$1"
+  local project_dir="$2"
+  local public_dir="$project_dir/public"
+  local vfile="$site_available_dir/$name.conf"
+  
+  log "Configuring Laravel project: $name"
+  
+  # Create .htaccess file if it doesn't exist
+  if [[ ! -f "$public_dir/.htaccess" ]]; then
+    log "Creating .htaccess file for Laravel"
+    cat > "$public_dir/.htaccess" <<HTACCESS
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+
+    # Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Redirect Trailing Slashes If Not A Folder...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+
+    # Send Requests To Front Controller...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+HTACCESS
+    ok "Created .htaccess file for Laravel"
+  fi
+  
+  # Create vhost file pointing to public directory
+  if [[ "$DEFAULT_PROTOCOL" == "https" ]]; then
+    cat > "$vfile" <<VHOST
+<VirtualHost *:443>
+    ServerName $name.$TLD
+    DocumentRoot "$public_dir"
+    SSLEngine on
+    SSLCertificateFile "$CERT_DIR/_wildcard.$TLD.pem"
+    SSLCertificateKeyFile "$CERT_DIR/_wildcard.$TLD-key.pem"
+    <Directory "$public_dir">
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+
+<VirtualHost *:80>
+    ServerName $name.$TLD
+    DocumentRoot "$public_dir"
+    <Directory "$public_dir">
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+VHOST
+  else
+    cat > "$vfile" <<VHOST
+<VirtualHost *:80>
+    ServerName $name.$TLD
+    DocumentRoot "$public_dir"
+    <Directory "$public_dir">
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+VHOST
+  fi
+  
+  sudo mv "$vfile" "$site_available_dir/"
+  sudo ln -sf "$site_available_dir/$(basename "$vfile")" "$site_enabled_dir/$(basename "$vfile")"
+  
+  # Add hosts entry
+  if ! grep -q "$name.$TLD" /etc/hosts; then
+    echo "127.0.0.1    $name.$TLD" | sudo tee -a /etc/hosts >/dev/null
+    ok "Added /etc/hosts entry for $name.$TLD"
+  fi
+  
+  ok "Laravel project configured: $name"
+  ok "Access your Laravel project at: http$([ "$DEFAULT_PROTOCOL" == "https" ] && echo 's')://$name.$TLD"
+}
+
+# ----------------------
 # Project Creation (Advanced Mode)
 # ----------------------
 create_advanced_project() {
   load_virtualhost_config
   local name="$1"
-  local project_dir="$HTDOCS_ROOT/$name"
+  local project_dir="$HTDOCS_ROOT/$PROJECT_FOLDER/$name"
   local vfile="$site_available_dir/$name.conf"
   
   if [[ -d "$project_dir" ]]; then
     warn "Project folder already exists: $project_dir"
+    # Check if it's a Laravel project and configure accordingly
+    if [[ -f "$project_dir/artisan" && -d "$project_dir/public" ]]; then
+      log "Detected Laravel project: $name"
+      configure_laravel_project "$name" "$project_dir"
+    fi
     return 0
   fi
   
@@ -512,14 +610,25 @@ create_custom_vhost() {
 # ----------------------
 list_projects() {
   load_virtualhost_config
-  echo "Projects under $HTDOCS_ROOT:"
+  local projects_dir="$HTDOCS_ROOT/$PROJECT_FOLDER"
+  echo "Projects under $projects_dir:"
   echo "Mode: $VIRTUALHOST_MODE"
   echo
   
-  if [[ -d "$HTDOCS_ROOT" ]]; then
-    ls -1 "$HTDOCS_ROOT" | while read -r project; do
-      if [[ -d "$HTDOCS_ROOT/$project" ]]; then
-        echo "📁 $project"
+  if [[ -d "$projects_dir" ]]; then
+    ls -1 "$projects_dir" | while read -r project; do
+      if [[ -d "$projects_dir/$project" ]]; then
+        # Detect project type
+        local project_type=""
+        if [[ -f "$projects_dir/$project/artisan" && -d "$projects_dir/$project/public" ]]; then
+          project_type=" (Laravel)"
+        elif [[ -f "$projects_dir/$project/wp-config.php" ]]; then
+          project_type=" (WordPress)"
+        elif [[ -f "$projects_dir/$project/package.json" ]]; then
+          project_type=" (Node.js)"
+        fi
+        
+        echo "📁 $project$project_type"
         if [[ "$VIRTUALHOST_MODE" == "simple" ]]; then
           echo "   URL: http$([ "$DEFAULT_PROTOCOL" == "https" ] && echo 's')://$project.$TLD (automatic)"
         else

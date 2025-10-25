@@ -56,6 +56,7 @@ Commands:
   info                  Show configuration and status
   restart               Restart Apache
   doctor                Run health checks
+  update                Update Supreme modules to latest version
   uninstall             Remove supreme (configs and CLI). Does NOT delete your projects unless confirmed.
 
 Virtual Host Mode Commands:
@@ -679,6 +680,52 @@ handle_command() {
           exit 1
           ;;
       esac
+      ;;
+      
+    update)
+      log "Updating Supreme modules to latest version..."
+      
+      # Check if we're in the development directory
+      local script_dir="/home/supreme-majesty/Documents/scripts/dev-env"
+      if [[ ! -d "$script_dir" ]]; then
+        err "Development directory not found: $script_dir"
+        err "Please run this command from the Supreme development environment"
+        exit 1
+      fi
+      
+      # Copy updated modules
+      log "Copying updated modules..."
+      sudo cp "$script_dir/supreme/modules/virtualhost.sh" /usr/local/share/supreme/modules/
+      sudo cp "$script_dir/supreme/modules/projects.sh" /usr/local/share/supreme/modules/
+      sudo cp "$script_dir/supreme/modules/platform.sh" /usr/local/share/supreme/modules/
+      sudo cp "$script_dir/supreme/modules/ssl.sh" /usr/local/share/supreme/modules/
+      sudo cp "$script_dir/supreme/modules/database.sh" /usr/local/share/supreme/modules/
+      sudo cp "$script_dir/supreme/modules/dependencies.sh" /usr/local/share/supreme/modules/
+      sudo cp "$script_dir/supreme/modules/sync.sh" /usr/local/share/supreme/modules/
+      sudo cp "$script_dir/supreme/lib/utils.sh" /usr/local/share/supreme/lib/
+      
+      # Fix module paths to use absolute paths
+      log "Fixing module paths..."
+      for module in /usr/local/share/supreme/modules/*.sh; do
+        if [[ -f "$module" ]]; then
+          sudo sed -i 's|source "$(dirname "${BASH_SOURCE\[0\]}")/../lib/utils.sh"|source "/usr/local/share/supreme/lib/utils.sh"|g' "$module"
+        fi
+      done
+      
+      # Update the CLI itself
+      log "Updating CLI..."
+      sudo cp "$script_dir/supreme/cli/supreme" /tmp/supreme-cli-temp
+      sudo sed -i 's|source "$(dirname "${BASH_SOURCE\[0\]}")/../lib/utils.sh"|source "/usr/local/share/supreme/lib/utils.sh"|g' /tmp/supreme-cli-temp
+      sudo sed -i 's|source "$(dirname "${BASH_SOURCE\[0\]}")/../modules/|source "/usr/local/share/supreme/modules/|g' /tmp/supreme-cli-temp
+      sudo cp /tmp/supreme-cli-temp /usr/local/bin/supreme
+      sudo chmod +x /usr/local/bin/supreme
+      
+      ok "Supreme modules updated successfully!"
+      log "Testing updated functionality..."
+      
+      # Test the updated list_projects function
+      echo "Updated project listing:"
+      list_projects | head -10
       ;;
       
     *)
